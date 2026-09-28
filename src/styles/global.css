@@ -122,6 +122,74 @@ hr {
 	}
 }
 
+/*
+  Polaroid-style callout photos used inside blog post bodies (e.g. first-post.mdx).
+  Floated so paragraph text wraps around them, with a slight rotation and a thick
+  bottom "caption strip" border to mimic an instant photo tucked into the page.
+*/
+.polaroid {
+	background: #fff;
+	border: 10px solid #fff;
+	border-bottom-width: 2.5em;
+	box-shadow: var(--box-shadow);
+	margin: 0.5em 1.5em 1.5em;
+	max-width: 260px;
+	position: relative;
+}
+.polaroid img {
+	display: block;
+	border-radius: 0;
+	width: 100%;
+}
+.polaroid figcaption {
+	position: absolute;
+	bottom: -2.1em;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-style: italic;
+	font-size: 0.85rem;
+	color: rgb(var(--gray-dark));
+}
+/* Rotate one way or the other so the two photos don't look like a mirrored pair */
+.polaroid.tilt-left {
+	float: left;
+	transform: rotate(-4deg);
+}
+.polaroid.tilt-right {
+	float: right;
+	transform: rotate(3deg);
+}
+.polaroid.tilt-left:hover,
+.polaroid.tilt-right:hover {
+	transform: rotate(0deg) scale(1.03);
+	transition: transform 0.2s ease-in-out;
+}
+/* Underlined "trigger" phrase in the prose that a photo callout is pointing at */
+.point-highlight {
+	text-decoration: underline solid var(--accent) 3px;
+	text-underline-offset: 4px;
+	font-weight: 700;
+}
+/* Small arrow glyph, coloured to match the accent, used next to a .point-highlight
+   phrase to visually point the reader toward the nearby polaroid photo */
+.point-arrow {
+	color: var(--accent);
+	font-weight: 700;
+	white-space: nowrap;
+}
+@media (max-width: 600px) {
+	/* Floating two rotated polaroids on a narrow screen fights the text wrap,
+	   so stack them full-width and drop the rotation instead. */
+	.polaroid.tilt-left,
+	.polaroid.tilt-right {
+		float: none;
+		transform: none;
+		margin: 1.5em auto;
+		max-width: 80%;
+	}
+}
+
 .sr-only {
 	border: 0;
 	padding: 0;
