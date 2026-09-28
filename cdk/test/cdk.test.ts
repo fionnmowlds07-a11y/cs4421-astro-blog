@@ -1,3 +1,5 @@
+import { test } from 'vitest'; // Add this import
+
 // import * as cdk from 'aws-cdk-lib/core';
 // import { Template } from 'aws-cdk-lib/assertions';
 // import * as Cdk from '../lib/cdk-stack';
