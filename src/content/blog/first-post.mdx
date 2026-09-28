@@ -1,0 +1,48 @@
+---
+title: 'First post'
+description: 'Introduction to my first blog'
+pubDate: 'September 23 2026'
+heroImage: '../imgs/first-blog-image.avif'
+author: 'fionn'
+---
+
+import { Image } from 'astro:assets';
+import grandadPhoto from '../imgs/photo-with-grandad.jpg';
+import firstPcPhoto from '../imgs/first-pc.jpg';
+
+{/* Photos live under src/content/imgs/. Importing them (rather than a plain
+   markdown ![]() reference) lets Astro's image pipeline optimise/resize them,
+   and lets us wrap each one in a <figure class="polaroid"> for the tilted,
+   bordered "photo callout" styling defined in src/styles/global.css. */}
+
+## Hello
+
+My name is Fionn Mowlds and this is my very first blog.
+
+I am an 18 year old athlete/college student studying Immersive Software Engineering at the University of Limerick. This first blog post is to discuss my love for computers, prevalent throughout my own life.
+
+## My first experience with computers
+
+{/* Polaroid #1: floated left and tilted, so this paragraph's text wraps
+   around it on the right. The underlined phrase + arrow below points the
+   reader across at the photo. */}
+<figure class="polaroid tilt-left">
+	<Image src={grandadPhoto} width={400} height={500} alt="Fionn as a child with his grandad, who built his own radio at 14" />
+	<figcaption>Me and my grandad</figcaption>
+</figure>
+
+My first experience with computers was with my own grandfather. He is a highly intelligent and capable man, and I remember from a very young age playing with old circuits with him and being taught how powerful electrical circuits can be. He himself was a civil engineer... but he was much more than that. From the young age of 14, <span class="point-highlight">he built his own radio system</span> <span class="point-arrow">&larr; that's him</span>! Not only did he figure out what he needed to build a fully working radio, he had to get an import licence and import all of the required pieces of technology into Cork in order to build it... at the age of 14!
+
+{/* Polaroid #2: floated right and tilted the opposite way from the first,
+   so the two photos don't read as a mirrored pair. It has to come BEFORE the
+   paragraph below in the markup, since a CSS float only pulls in content
+   that follows it in the document — placing it after the paragraph (as
+   originally written) left nothing left to wrap around it. */}
+<figure class="polaroid tilt-right">
+	<Image src={firstPcPhoto} width={400} height={500} alt="The first PC Fionn built himself at age 12" />
+	<figcaption>My first build</figcaption>
+</figure>
+
+This sparked my interest in circuits and computers throughout my childhood, <span class="point-highlight">leading me to build my own PC when I was 12</span> <span class="point-arrow">that's it, on the right &rarr;</span>, with parts I bought myself on Done Deal.
+
+*More to come...*
