@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Astro site dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "build(deps)"
+
+  # AWS CDK infrastructure dependencies
+  - package-ecosystem: "npm"
+    directory: "/cdk"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "build(deps)"
+
+  # GitHub Actions used in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci(deps)"
