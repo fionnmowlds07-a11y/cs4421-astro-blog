@@ -18,7 +18,7 @@
     "typescript": "~7.0.2"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.6",
+    "@astrojs/node": "^11.1.7",
     "aws-cdk-lib": "^2.270.0",
     "constructs": "^10.5.0"
   }
