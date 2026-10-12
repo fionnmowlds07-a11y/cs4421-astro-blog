@@ -1,7 +1,8 @@
 name: Deploy Static Site via AWS CDK
+# Manual-only: the SSR build output is incompatible with this S3 deploy (see ADR-001).
+# Re-enable or replace once the container deploy exists.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
