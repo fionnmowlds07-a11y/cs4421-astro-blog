@@ -28,3 +28,6 @@ jobs:
 
       - name: Run Unit Tests
         run: npm run test:unit
+
+      - name: Build Docker image
+        run: docker build --platform linux/amd64 -t astro-blog:ci .
