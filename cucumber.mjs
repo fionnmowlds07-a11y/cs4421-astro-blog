@@ -2,5 +2,5 @@
 export default {
 	paths: ['features/**/*.feature'],
 	import: ['features/support/**/*.ts', 'features/step_definitions/**/*.ts'],
-	format: ['progress-bar', 'html:reports/cucumber-report.html'],
+	format: ['progress', 'html:reports/cucumber-report.html'],
 };
