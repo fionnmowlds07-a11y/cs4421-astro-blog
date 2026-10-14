@@ -29,6 +29,10 @@ When('I send a POST request to {string} with body:', async function (this: ApiWo
 	await send(this, 'POST', path, body);
 });
 
+When('I submit feedback with a message of {int} characters', async function (this: ApiWorld, length: number) {
+	await send(this, 'POST', '/api/feedback', JSON.stringify({ message: 'a'.repeat(length) }));
+});
+
 Then('the response status should be {int}', function (this: ApiWorld, status: number) {
 	assert.equal(this.response?.status, status);
 });
@@ -39,6 +43,14 @@ Then('the response should be JSON', function (this: ApiWorld) {
 
 Then('the response field {string} should equal {string}', function (this: ApiWorld, name: string, expected: string) {
 	assert.equal(String(field(this, name)), expected);
+});
+
+Then('the response field {string} should contain {string}', function (this: ApiWorld, name: string, expected: string) {
+	assert.ok(String(field(this, name)).includes(expected), `expected "${String(field(this, name))}" to contain "${expected}"`);
+});
+
+Then('the response field {string} should be a UUID', function (this: ApiWorld, name: string) {
+	assert.match(String(field(this, name)), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });
 
 Then('the response field {string} should be a number', function (this: ApiWorld, name: string) {
