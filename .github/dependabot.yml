@@ -4,19 +4,39 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "build(deps)"
+    # One PR for all minor/patch bumps; majors still arrive as individual PRs to review on their own
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # eslint 10 is blocked until eslint-plugin-jsx-a11y supports it, and eslint-plugin-astro 3 requires eslint 10
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-astro"
+        update-types: ["version-update:semver-major"]
+      # @astrojs/check does not support TypeScript 7 yet
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # AWS CDK infrastructure dependencies
   - package-ecosystem: "npm"
     directory: "/cdk"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "build(deps)"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Keep Node type definitions in line with the Node 24 runtime used in CI and Docker
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows
   - package-ecosystem: "github-actions"
@@ -25,3 +45,6 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
