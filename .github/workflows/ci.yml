@@ -31,3 +31,29 @@ jobs:
 
       - name: Build Docker image
         run: docker build --platform linux/amd64 -t astro-blog:ci .
+
+  cdk-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: cdk/package-lock.json
+
+      - name: Install CDK dependencies
+        run: npm ci
+
+      - name: Type-check CDK app
+        run: npm run build
+
+      - name: Run CDK infrastructure tests
+        run: npm test
