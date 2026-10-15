@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import type { ApiMatch } from './football';
-import { buildTable, headToHead, positionHistory, teamStats } from './league';
+import { describe, expect, it, vi } from 'vitest';
+import { type ApiMatch, FootballDataError, MAN_UNITED_ID } from './football';
+import {
+	type ApiLeagueScorer,
+	type ApiSquadPlayer,
+	buildTable,
+	fetchPremierLeagueData,
+	headToHead,
+	leagueScorers,
+	positionHistory,
+	squadSummary,
+	teamStats,
+} from './league';
 
 const team = (id: number, shortName: string) => ({
 	id,
@@ -167,5 +177,121 @@ describe('headToHead', () => {
 
 	it('returns nothing for teams that do not meet', () => {
 		expect(headToHead(SEASON, CHELSEA.id, EVERTON.id)).toEqual([]);
+	});
+});
+
+const UNITED = team(MAN_UNITED_ID, 'Man United');
+
+const scorer = (id: number, name: string, scorerTeam: ReturnType<typeof team>, goals: number): ApiLeagueScorer => ({
+	player: { id, name, nationality: 'England' },
+	team: scorerTeam,
+	goals,
+	assists: null,
+	playedMatches: 6,
+});
+
+describe('leagueScorers', () => {
+	it('lists every scorer with their team, most goals first, keeping missing assists as null', () => {
+		const scorers = leagueScorers([scorer(1, 'Saka', ARSENAL, 2), scorer(2, 'Bruno', UNITED, 3)]);
+		expect(scorers.map((s) => [s.name, s.team.shortName, s.goals, s.assists])).toEqual([
+			['Bruno', 'Man United', 3, null],
+			['Saka', 'Arsenal', 2, null],
+		]);
+	});
+});
+
+describe('squadSummary', () => {
+	const player = (id: number, name: string, position: string | null, dateOfBirth: string | null = null): ApiSquadPlayer => ({
+		id,
+		name,
+		position,
+		dateOfBirth,
+		nationality: 'England',
+	});
+
+	it('groups by position, goalkeepers first, with scorers first and unknown positions last', () => {
+		const squad = squadSummary(
+			[
+				player(1, 'Zirkzee', 'Offence'),
+				player(2, 'Armer', null),
+				player(3, 'Amad', 'Offence'),
+				player(4, 'Onana', 'Goalkeeper'),
+				player(5, 'Mbeumo', 'Offence'),
+				player(6, 'Mainoo', 'Midfield'),
+			],
+			[scorer(5, 'Mbeumo', UNITED, 3), scorer(99, 'Saka', ARSENAL, 2)],
+		);
+		expect(squad.map((p) => [p.name, p.position, p.goals])).toEqual([
+			['Onana', 'Goalkeeper', 0],
+			['Mainoo', 'Midfield', 0],
+			['Mbeumo', 'Offence', 3],
+			['Amad', 'Offence', 0],
+			['Zirkzee', 'Offence', 0],
+			['Armer', 'Other', 0],
+		]);
+	});
+
+	it('works out ages, counting a birthday only once it has happened', () => {
+		const today = new Date('2026-10-15T12:00:00Z');
+		const ages = squadSummary(
+			[
+				player(1, 'Before', 'Midfield', '2000-10-14'),
+				player(2, 'On', 'Midfield', '2000-10-15'),
+				player(3, 'After', 'Midfield', '2000-10-16'),
+				player(4, 'Unknown', 'Midfield', null),
+			],
+			[],
+			MAN_UNITED_ID,
+			today,
+		).map((p) => [p.name, p.age]);
+		expect(ages).toEqual([
+			['After', 25],
+			['Before', 26],
+			['On', 26],
+			['Unknown', null],
+		]);
+	});
+});
+
+describe('fetchPremierLeagueData', () => {
+	const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+	it('makes the three API calls with the key header and derives every table and stat', async () => {
+		const season = [...SEASON, game(4, '2026-09-01', UNITED, ARSENAL, [1, 0]), game(5, '2026-12-20', CHELSEA, UNITED)];
+		const fetchFn = vi.fn(async (url: string | URL | Request) => {
+			const path = String(url);
+			if (path.endsWith('/matches')) return json({ matches: season });
+			if (path.includes('/scorers')) return json({ scorers: [scorer(7, 'Bruno', UNITED, 1)] });
+			return json({ squad: [{ id: 7, name: 'Bruno', position: 'Midfield', dateOfBirth: null, nationality: 'Portugal' }] });
+		});
+
+		const data = await fetchPremierLeagueData('test-key', fetchFn as typeof fetch);
+
+		expect(fetchFn.mock.calls.map(([url]) => String(url))).toEqual([
+			'https://api.football-data.org/v4/competitions/PL/matches',
+			'https://api.football-data.org/v4/competitions/PL/scorers?limit=100',
+			`https://api.football-data.org/v4/teams/${MAN_UNITED_ID}`,
+		]);
+		for (const [, init] of fetchFn.mock.calls as unknown as [string, RequestInit][]) {
+			expect(init.headers).toEqual({ 'X-Auth-Token': 'test-key' });
+		}
+		expect(data.tables.all).toHaveLength(6);
+		expect(data.tables.home.find((r) => r.team.id === MAN_UNITED_ID)?.points).toBe(3);
+		expect(data.stats).toHaveLength(6);
+		expect(data.positionHistory.matchdays).toEqual([1, 2, 4]);
+		expect(Object.keys(data.headToHead)).toHaveLength(5);
+		expect(data.headToHead[ARSENAL.id].map((m) => m.score)).toEqual([{ home: 1, away: 0 }]);
+		expect(data.headToHead[CHELSEA.id].map((m) => m.score)).toEqual([null]);
+		expect(data.headToHead[BRIGHTON.id]).toEqual([]);
+		expect(data.scorers.map((s) => s.name)).toEqual(['Bruno']);
+		expect(data.squad).toMatchObject([{ name: 'Bruno', position: 'Midfield', goals: 1 }]);
+	});
+
+	it('throws a FootballDataError carrying the status when the API refuses', async () => {
+		const fetchFn = vi.fn(async () => json({ message: 'Too many requests' }, 429));
+		const error = await fetchPremierLeagueData('test-key', fetchFn as typeof fetch).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(FootballDataError);
+		expect((error as FootballDataError).status).toBe(429);
 	});
 });

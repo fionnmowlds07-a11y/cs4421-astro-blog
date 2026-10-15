@@ -1,9 +1,19 @@
 // Premier League stats derived from a season's matches.
 // The free football-data.org tier only returns the overall table (with form: null), so home/away
 // tables, form, clean sheets, half-time records and position history are worked out here from results.
-// Every function is pure (no network), so they can be unit tested with fixture data.
+// The mapping functions are pure (no network), so they can be unit tested with fixture data;
+// the network section at the bottom loads and caches everything the stats pages need.
 
-import type { ApiMatch, ApiTeam, Outcome } from './football';
+import {
+	type ApiMatch,
+	type ApiScorer,
+	type ApiTeam,
+	createTtlCache,
+	type FetchFn,
+	getJson,
+	MAN_UNITED_ID,
+	type Outcome,
+} from './football';
 
 const FORM_LENGTH = 5;
 
@@ -51,6 +61,51 @@ export interface TeamStats {
 export interface PositionHistory {
 	matchdays: number[];
 	teams: { team: TeamInfo; positions: number[] }[];
+}
+
+export interface ApiLeagueScorer extends ApiScorer {
+	team: ApiTeam;
+}
+
+export interface ApiSquadPlayer {
+	id: number;
+	name: string;
+	position: string | null;
+	dateOfBirth: string | null;
+	nationality: string | null;
+}
+
+export interface LeagueScorer {
+	playerId: number;
+	name: string;
+	nationality: string | null;
+	team: TeamInfo;
+	goals: number;
+	/** null on the free tier, which doesn't report assists. */
+	assists: number | null;
+	playedMatches: number | null;
+}
+
+export type PositionGroup = 'Goalkeeper' | 'Defence' | 'Midfield' | 'Offence' | 'Other';
+
+export interface SquadPlayer {
+	id: number;
+	name: string;
+	position: PositionGroup;
+	age: number | null;
+	nationality: string | null;
+	goals: number;
+}
+
+export interface PremierLeagueData {
+	tables: Record<Venue, TableRow[]>;
+	stats: TeamStats[];
+	positionHistory: PositionHistory;
+	/** United's league meetings with each opponent, keyed by the opponent's team id. */
+	headToHead: Record<number, HeadToHeadMatch[]>;
+	scorers: LeagueScorer[];
+	squad: SquadPlayer[];
+	updatedAt: string;
 }
 
 export interface HeadToHeadMatch {
@@ -263,4 +318,97 @@ export function headToHead(matches: ApiMatch[], teamA: number, teamB: number): H
 			away: toTeamInfo(m.awayTeam),
 			score: isFinished(m) ? { home: m.score.fullTime.home as number, away: m.score.fullTime.away as number } : null,
 		}));
+}
+
+/** The league's top scorers, most goals first (ties keep the API's order, which favours fewer games). */
+export function leagueScorers(scorers: ApiLeagueScorer[]): LeagueScorer[] {
+	return scorers
+		.map((s) => ({
+			playerId: s.player.id,
+			name: s.player.name,
+			nationality: s.player.nationality ?? null,
+			team: toTeamInfo(s.team),
+			goals: s.goals,
+			assists: s.assists,
+			playedMatches: s.playedMatches ?? null,
+		}))
+		.sort((a, b) => b.goals - a.goals);
+}
+
+const POSITION_ORDER: PositionGroup[] = ['Goalkeeper', 'Defence', 'Midfield', 'Offence', 'Other'];
+
+function ageOn(dateOfBirth: string | null, today: Date): number | null {
+	if (!dateOfBirth) return null;
+	const born = new Date(dateOfBirth);
+	const hadBirthday =
+		today.getUTCMonth() > born.getUTCMonth() ||
+		(today.getUTCMonth() === born.getUTCMonth() && today.getUTCDate() >= born.getUTCDate());
+	return today.getUTCFullYear() - born.getUTCFullYear() - (hadBirthday ? 0 : 1);
+}
+
+/**
+ * The squad grouped by position (goalkeepers first), with ages and league goals from the scorer list.
+ * Within a position, scorers come first, then alphabetical.
+ */
+export function squadSummary(
+	squad: ApiSquadPlayer[],
+	scorers: ApiScorer[],
+	teamId = MAN_UNITED_ID,
+	today = new Date(),
+): SquadPlayer[] {
+	const goals = new Map(scorers.filter((s) => s.team.id === teamId).map((s) => [s.player.id, s.goals]));
+	const groupOf = (position: string | null): PositionGroup =>
+		POSITION_ORDER.includes(position as PositionGroup) ? (position as PositionGroup) : 'Other';
+
+	return squad
+		.map((p) => ({
+			id: p.id,
+			name: p.name,
+			position: groupOf(p.position),
+			age: ageOn(p.dateOfBirth, today),
+			nationality: p.nationality,
+			goals: goals.get(p.id) ?? 0,
+		}))
+		.sort(
+			(a, b) =>
+				POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position) ||
+				b.goals - a.goals ||
+				a.name.localeCompare(b.name),
+		);
+}
+
+// --- Network ---
+
+/** Loads the whole season in 3 parallel requests and derives every table and stat from it. */
+export async function fetchPremierLeagueData(apiKey: string, fetchFn: FetchFn = fetch): Promise<PremierLeagueData> {
+	const [season, scorers, team] = await Promise.all([
+		getJson<{ matches: ApiMatch[] }>('/competitions/PL/matches', apiKey, fetchFn),
+		getJson<{ scorers: ApiLeagueScorer[] }>('/competitions/PL/scorers?limit=100', apiKey, fetchFn),
+		getJson<{ squad: ApiSquadPlayer[] }>(`/teams/${MAN_UNITED_ID}`, apiKey, fetchFn),
+	]);
+	const matches = season.matches;
+	const opponents = [...new Set(matches.flatMap((m) => [m.homeTeam.id, m.awayTeam.id]))].filter(
+		(id) => id !== MAN_UNITED_ID,
+	);
+
+	return {
+		tables: { all: buildTable(matches, 'all'), home: buildTable(matches, 'home'), away: buildTable(matches, 'away') },
+		stats: teamStats(matches),
+		positionHistory: positionHistory(matches),
+		headToHead: Object.fromEntries(opponents.map((id) => [id, headToHead(matches, MAN_UNITED_ID, id)])),
+		scorers: leagueScorers(scorers.scorers),
+		squad: squadSummary(team.squad, scorers.scorers),
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+export const LEAGUE_TTL_MS = 10 * 60 * 1000;
+const leagueCache = createTtlCache<PremierLeagueData>(LEAGUE_TTL_MS);
+
+/**
+ * Cached league data: 3 requests per 10 minutes per running server. Together with the
+ * Man United summary (also 3) that stays well inside the free tier's 10 requests per minute.
+ */
+export function getPremierLeagueData(apiKey: string): Promise<PremierLeagueData> {
+	return leagueCache.get('premier-league', () => fetchPremierLeagueData(apiKey));
 }
