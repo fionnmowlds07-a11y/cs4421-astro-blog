@@ -32,6 +32,38 @@ jobs:
       - name: Build Docker image
         run: docker build --platform linux/amd64 -t astro-blog:ci .
 
+      # Acceptance tests run against the container itself, i.e. exactly what ships.
+      # Health is polled every 2s here so CI doesn't wait for the image's 30s interval.
+      - name: Start container
+        run: docker run -d -p 4321:4321 --health-interval=2s --name astro-blog astro-blog:ci
+
+      - name: Wait for container to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' astro-blog)
+            echo "health: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Run BDD acceptance tests
+        run: npm run test:bdd
+        env:
+          BASE_URL: http://localhost:4321
+
+      - name: Show container logs
+        if: failure()
+        run: docker logs astro-blog
+
+      - name: Upload Cucumber report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-report
+          path: reports/cucumber-report.html
+          if-no-files-found: ignore
+
   cdk-test:
     runs-on: ubuntu-latest
     defaults:
