@@ -320,6 +320,89 @@ export function headToHead(matches: ApiMatch[], teamA: number, teamB: number): H
 		}));
 }
 
+export interface StatMetric {
+	key: string;
+	label: string;
+	short: string;
+	/** Whether a bigger number is better (goals scored) or worse (goals conceded). */
+	better: 'high' | 'low';
+	value: (stats: TeamStats) => number;
+	format: (value: number) => string;
+	hint?: string;
+}
+
+const decimal = (value: number) => value.toFixed(2);
+const whole = (value: number) => String(value);
+
+/** The team stats shown on the Stats and Compare pages, in display order. */
+export const STAT_METRICS: StatMetric[] = [
+	{ key: 'pointsPerGame', label: 'Points per game', short: 'PPG', better: 'high', value: (s) => s.pointsPerGame, format: decimal },
+	{ key: 'winRate', label: 'Win rate', short: 'Win %', better: 'high', value: (s) => s.winRate, format: (v) => `${Math.round(v)}%` },
+	{ key: 'goalsPerGame', label: 'Goals per game', short: 'GF/G', better: 'high', value: (s) => s.goalsPerGame, format: decimal },
+	{ key: 'concededPerGame', label: 'Conceded per game', short: 'GA/G', better: 'low', value: (s) => s.concededPerGame, format: decimal },
+	{ key: 'cleanSheets', label: 'Clean sheets', short: 'CS', better: 'high', value: (s) => s.cleanSheets, format: whole },
+	{ key: 'failedToScore', label: 'Failed to score', short: 'FTS', better: 'low', value: (s) => s.failedToScore, format: whole },
+	{
+		key: 'leadingAtHalfTime',
+		label: 'Ahead at half-time',
+		short: 'HT ▲',
+		better: 'high',
+		value: (s) => s.halfTime.leading,
+		format: whole,
+	},
+	{
+		key: 'trailingAtHalfTime',
+		label: 'Behind at half-time',
+		short: 'HT ▼',
+		better: 'low',
+		value: (s) => s.halfTime.trailing,
+		format: whole,
+	},
+	{
+		key: 'comebacks',
+		label: 'Comebacks',
+		short: 'CB',
+		better: 'high',
+		value: (s) => s.comebacks,
+		format: whole,
+		hint: 'Behind at half-time but didn’t lose',
+	},
+];
+
+export interface StatRank {
+	value: number;
+	/** 1 = best in the league. Tied teams share a rank, like a sports table ("=3rd"). */
+	rank: number;
+	tied: boolean;
+	of: number;
+	best: number;
+	worst: number;
+	average: number;
+}
+
+/**
+ * Where a team sits in the league for one stat, plus the league's best, worst and average.
+ * Teams yet to play are left out, so their zeros don't skew the ranking.
+ */
+export function rankFor(stats: TeamStats[], metric: StatMetric, teamId: number): StatRank | null {
+	const ranked = stats.filter((s) => s.played > 0);
+	const team = ranked.find((s) => s.team.id === teamId);
+	if (!team) return null;
+	const values = ranked.map(metric.value);
+	const value = metric.value(team);
+	const isBetter = (other: number) => (metric.better === 'high' ? other > value : other < value);
+	const sorted = [...values].sort((a, b) => (metric.better === 'high' ? b - a : a - b));
+	return {
+		value,
+		rank: 1 + values.filter(isBetter).length,
+		tied: values.filter((v) => v === value).length > 1,
+		of: values.length,
+		best: sorted[0],
+		worst: sorted[sorted.length - 1],
+		average: round2(values.reduce((sum, v) => sum + v, 0) / values.length),
+	};
+}
+
 /** The league's top scorers, most goals first (ties keep the API's order, which favours fewer games). */
 export function leagueScorers(scorers: ApiLeagueScorer[]): LeagueScorer[] {
 	return scorers

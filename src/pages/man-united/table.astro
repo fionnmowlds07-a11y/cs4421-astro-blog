@@ -99,7 +99,7 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 				</div>
 
 				<div class="table-wrap" role="region" aria-label="Premier League table">
-					<table class="league-table" data-testid="league-table">
+					<table class="data-table" data-testid="league-table">
 						<thead>
 							<tr>
 								<th scope="col" class="pos">
@@ -204,76 +204,10 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 	.reset {
 		font-size: 0.8em;
 	}
-	/* Wide tables scroll sideways inside their own box on phones, not the whole page */
-	.table-wrap {
-		overflow-x: auto;
-		border-radius: 14px;
-		background: var(--surface);
-		box-shadow: 0 1px 3px rgba(var(--black), 8%);
-	}
-	.league-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.8em;
-		font-variant-numeric: tabular-nums;
-	}
-	.league-table th,
-	.league-table td {
-		padding: 0.55rem 0.5rem;
-		border-bottom: 1px solid rgba(var(--gray-light), 100%);
-		white-space: nowrap;
-	}
-	.league-table tbody tr:last-child > * {
-		border-bottom: none;
-	}
-	.league-table thead th {
-		font-size: 0.8em;
-		text-transform: uppercase;
-		color: rgb(var(--gray));
-		background: rgba(var(--gray-light), 35%);
-	}
-	.league-table thead a {
-		color: inherit;
-		text-decoration: none;
-	}
-	.league-table thead a:hover,
-	.league-table thead .sorted a {
-		color: var(--accent);
-	}
-	abbr {
-		text-decoration: none;
-	}
 	.pos {
 		width: 2rem;
 		text-align: center;
 		color: rgb(var(--gray));
-	}
-	.club {
-		text-align: left;
-		font-weight: 700;
-		color: rgb(var(--black));
-	}
-	/* One inline-flex box, so the column is always at least as wide as crest + name */
-	.club-inner {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	/* The global img max-width: 100% would let the table squash crests to nothing when sizing columns */
-	.club img {
-		max-width: none;
-		flex-shrink: 0;
-		object-fit: contain;
-	}
-	.club .tla {
-		display: none;
-	}
-	.num {
-		text-align: right;
-	}
-	td.sorted {
-		font-weight: 700;
-		background: rgba(218, 41, 28, 5%);
 	}
 	th.form,
 	td.form {
@@ -283,29 +217,11 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 		display: inline-flex;
 		gap: 0.2rem;
 	}
-	/* Man United's row: United yellow wash with a red edge */
-	tr.united > * {
-		background: rgba(251, 225, 34, 28%);
-	}
-	tr.united > :first-child {
-		box-shadow: inset 4px 0 0 var(--accent);
+	tr.united > .pos {
 		color: rgb(var(--black));
 		font-weight: 700;
 	}
 	tr.relegation > * {
 		border-top: 2px dashed rgba(218, 41, 28, 55%);
-	}
-	/* Phones: three-letter club codes instead of names */
-	@media (max-width: 600px) {
-		.club .name {
-			display: none;
-		}
-		.club .tla {
-			display: inline;
-		}
-		.league-table th,
-		.league-table td {
-			padding: 0.5rem 0.35rem;
-		}
 	}
 </style>

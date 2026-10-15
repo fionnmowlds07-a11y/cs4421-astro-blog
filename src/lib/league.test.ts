@@ -8,7 +8,10 @@ import {
 	headToHead,
 	leagueScorers,
 	positionHistory,
+	rankFor,
 	squadSummary,
+	STAT_METRICS,
+	type StatMetric,
 	teamStats,
 } from './league';
 
@@ -141,6 +144,40 @@ describe('teamStats', () => {
 	it('leaves games without a half-time score out of the half-time record', () => {
 		const [arsenal] = teamStats([game(1, '2026-08-01', ARSENAL, BRIGHTON, [1, 0])]);
 		expect(arsenal).toMatchObject({ played: 1, halfTime: { leading: 0, level: 0, trailing: 0 } });
+	});
+});
+
+describe('rankFor', () => {
+	const metric = (key: string) => STAT_METRICS.find((m) => m.key === key) as StatMetric;
+	const stats = teamStats(SEASON);
+
+	it('ranks a team against teams that have played, with the league best, worst and average', () => {
+		// Points per game: Arsenal 2, Brighton 1.5, Derby 1, Chelsea 0.5 (Everton hasn't played).
+		expect(rankFor(stats, metric('pointsPerGame'), BRIGHTON.id)).toEqual({
+			value: 1.5,
+			rank: 2,
+			tied: false,
+			of: 4,
+			best: 2,
+			worst: 0.5,
+			average: 1.25,
+		});
+	});
+
+	it('treats lower as better for stats like goals conceded', () => {
+		// Conceded per game: Arsenal 0, Derby 0.5, Brighton 1.5, Chelsea 2.
+		expect(rankFor(stats, metric('concededPerGame'), DERBY.id)).toMatchObject({ rank: 2, best: 0, worst: 2 });
+	});
+
+	it('gives tied teams the same rank', () => {
+		// Clean sheets: Arsenal 2, Derby 1, Brighton 0, Chelsea 0.
+		expect(rankFor(stats, metric('cleanSheets'), BRIGHTON.id)).toMatchObject({ rank: 3, tied: true });
+		expect(rankFor(stats, metric('cleanSheets'), CHELSEA.id)).toMatchObject({ rank: 3, tied: true });
+	});
+
+	it('reads nested half-time stats and returns null for teams that have not played', () => {
+		expect(rankFor(stats, metric('trailingAtHalfTime'), BRIGHTON.id)).toMatchObject({ value: 2, rank: 4 });
+		expect(rankFor(stats, metric('pointsPerGame'), EVERTON.id)).toBeNull();
 	});
 });
 
