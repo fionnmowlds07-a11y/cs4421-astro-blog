@@ -3,8 +3,8 @@ import { SITE_TITLE } from '../consts';
 import HeaderLink from './HeaderLink.astro';
 ---
 
-<!-- The header stays put during page transitions; only the page content animates. -->
-<header transition:name="site-header" transition:animate="none">
+<!-- The header cross-fades between section themes (its layout never moves, so only colours change). -->
+<header transition:name="site-header" transition:animate="fade">
 	<nav>
 		<h2><a href="/">{SITE_TITLE}</a></h2>
 		<div class="internal-links">
