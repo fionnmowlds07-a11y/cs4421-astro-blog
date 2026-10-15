@@ -21,6 +21,10 @@ const posts = (await getCollection('blog')).sort(
 			main {
 				width: 960px;
 			}
+			.intro {
+				max-width: 720px;
+				margin-bottom: 3rem;
+			}
 			ul {
 				display: flex;
 				flex-wrap: wrap;
@@ -90,6 +94,15 @@ const posts = (await getCollection('blog')).sort(
 	<body>
 		<Header />
 		<main>
+			<header class="intro">
+				<h1>About Me</h1>
+				<span class="stripe" aria-hidden="true"></span>
+				<p>
+					My name is Fionn Mowlds. I am a current student in Immersive Software Engineering (LM173) at the
+					University of Limerick. As well as this, I am a devoted rower and have previously represented
+					Ireland internationally.
+				</p>
+			</header>
 			<section>
 				<ul>
 					{

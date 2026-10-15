@@ -36,6 +36,25 @@ Then('the page should not link to anything on {string}', function (this: ApiWorl
 	assert.deepEqual(offending, [], `found links to ${domain}`);
 });
 
+Then('the page should use the {string} theme', function (this: ApiWorld, theme: string) {
+	const htmlTag = html(this).match(/<html\b[^>]*>/)?.[0] ?? '';
+	const declared = htmlTag.match(/data-theme="([^"]*)"/)?.[1] ?? 'neutral';
+	assert.equal(declared, theme);
+});
+
+Then('the page should have smooth page transitions enabled', function (this: ApiWorld) {
+	assert.match(html(this), /<meta name="astro-view-transitions-enabled" content="true"/);
+});
+
+Then('the page should have a {string} card linking to {string}', function (this: ApiWorld, card: string, href: string) {
+	const anchors = [...html(this).matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
+	const match = anchors.find((a) => {
+		const classes = a.match(/class="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+		return classes.includes('card') && classes.includes(card) && a.includes(`href="${href}"`);
+	});
+	assert.ok(match, `no "${card}" card linking to ${href}`);
+});
+
 Then('I should be permanently redirected to {string}', function (this: ApiWorld, path: string) {
 	assert.equal(this.response?.status, 301);
 	const location = this.response?.headers.get('location') ?? '';

@@ -3,7 +3,8 @@ import { SITE_TITLE } from '../consts';
 import HeaderLink from './HeaderLink.astro';
 ---
 
-<header>
+<!-- The header cross-fades between section themes (its layout never moves, so only colours change). -->
+<header transition:name="site-header" transition:animate="fade">
 	<nav>
 		<h2><a href="/">{SITE_TITLE}</a></h2>
 		<div class="internal-links">
@@ -35,41 +36,69 @@ import HeaderLink from './HeaderLink.astro';
 	</nav>
 </header>
 <style>
+	/* Sticky, slightly translucent bar; colours come from the active section theme. */
 	header {
+		position: sticky;
+		top: 0;
+		z-index: 10;
 		margin: 0;
 		padding: 0 1em;
-		background: white;
-		box-shadow: 0 2px 8px rgba(var(--black), 5%);
+		background: var(--header-bg);
+		backdrop-filter: saturate(180%) blur(12px);
+		-webkit-backdrop-filter: saturate(180%) blur(12px);
+		border-bottom: 1px solid rgba(var(--gray-light), 60%);
+		transition: background-color var(--speed) var(--ease);
 	}
 	h2 {
 		margin: 0;
 		font-size: 1em;
+		letter-spacing: -0.01em;
 	}
-
-	h2 a,
-	h2 a.active {
+	h2 a {
+		color: var(--header-text);
 		text-decoration: none;
 	}
 	nav {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 1em;
 	}
-	nav a {
-		padding: 1em 0.5em;
-		color: var(--black);
-		border-bottom: 4px solid transparent;
-		text-decoration: none;
+	.internal-links {
+		display: flex;
+		flex-wrap: wrap;
 	}
-	nav a.active {
-		text-decoration: none;
-		border-bottom-color: var(--accent);
+	.social-links {
+		display: flex;
+		gap: 0.75em;
 	}
-	.social-links,
 	.social-links a {
 		display: flex;
+		color: var(--header-text);
+		opacity: 0.7;
+		transition:
+			opacity var(--speed) var(--ease),
+			transform var(--speed) var(--ease);
 	}
+	.social-links a:hover {
+		opacity: 1;
+		transform: translateY(-2px);
+	}
+	/* Phones: title on its own line, tabs in one row underneath (scrolls sideways if needed). */
 	@media (max-width: 720px) {
+		nav {
+			flex-wrap: wrap;
+			gap: 0;
+		}
+		h2 {
+			width: 100%;
+			padding-top: 0.75em;
+		}
+		.internal-links {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			margin: 0 -0.6em;
+		}
 		.social-links {
 			display: none;
 		}

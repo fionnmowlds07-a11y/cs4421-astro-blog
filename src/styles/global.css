@@ -4,30 +4,76 @@
   License MIT: https://github.com/HermanMartinus/bearblog/blob/master/LICENSE.md
  */
 
+/*
+  Theme tokens. Pages opt into a section theme with <html data-theme="...">;
+  everything else reads these variables, so colours change in one place.
+  Colour triplets (e.g. 15, 18, 25) are used as rgb(var(--x)) or rgba(var(--x), 50%).
+ */
 :root {
-	--accent: #2337ff;
-	--accent-dark: #000d8a;
-	--black: 15, 18, 25;
-	--gray: 96, 115, 159;
-	--gray-light: 229, 233, 240;
-	--gray-dark: 34, 41, 57;
-	--gray-gradient: rgba(var(--gray-light), 50%), #fff;
+	/* Neutral theme: Home and About Me */
+	--bg: #f6f6f7;
+	--surface: #ffffff;
+	--black: 12, 13, 15;
+	--gray: 98, 104, 115;
+	--gray-light: 229, 231, 235;
+	--gray-dark: 33, 37, 43;
+	--accent: #111214;
+	--accent-dark: #000000;
+	/* Header is black on every page; sections only change its accent colour */
+	--header-bg: rgba(10, 10, 10, 0.92);
+	--header-text: #ffffff;
+	--header-accent: #ffffff;
+	--gray-gradient: rgba(var(--gray-light), 50%), var(--bg);
 	--box-shadow:
 		0 2px 6px rgba(var(--gray), 25%), 0 8px 24px rgba(var(--gray), 33%),
 		0 16px 32px rgba(var(--gray), 33%);
+
+	/* Decorative bar under section headings */
+	--stripe: linear-gradient(90deg, #111214 0 70%, #9ca3af 70%);
+
+	/* Motion */
+	--ease: cubic-bezier(0.22, 1, 0.36, 1);
+	--speed: 220ms;
+}
+/* Man United: yellow tab highlight, red accents. */
+[data-theme='united'] {
+	--bg: #ffffff;
+	--accent: #da291c;
+	--accent-dark: #a51d13;
+	--header-accent: #fbe122;
+	--stripe: linear-gradient(90deg, #da291c 0 60%, #fbe122 60% 80%, #0a0a0a 80%);
+	--gray-gradient: rgba(218, 41, 28, 8%), var(--bg);
+}
+/* Rowing: UL green (shades shared with the UL Erg app). */
+[data-theme='rowing'] {
+	--bg: #ffffff;
+	--accent: #117a3e;
+	--accent-dark: #0c5e2f;
+	--header-accent: #1fc764;
+	--stripe: linear-gradient(90deg, #1fc764 0 70%, #050706 70%);
+	--gray-gradient: rgba(31, 199, 100, 10%), var(--bg);
 }
 body {
 	font-family: var(--font-atkinson);
 	margin: 0;
 	padding: 0;
 	text-align: left;
-	background: linear-gradient(var(--gray-gradient)) no-repeat;
-	background-size: 100% 600px;
+	background: linear-gradient(var(--gray-gradient)) no-repeat, var(--bg);
+	background-size: 100% 600px, auto;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
 	color: rgb(var(--gray-dark));
 	font-size: 20px;
 	line-height: 1.7;
+	-webkit-font-smoothing: antialiased;
+	transition:
+		background-color var(--speed) var(--ease),
+		color var(--speed) var(--ease);
+}
+html {
+	scroll-behavior: smooth;
+	/* Always reserve the scrollbar's space so short and long pages have the same width (no sideways jump). */
+	scrollbar-gutter: stable;
 }
 main {
 	width: 720px;
@@ -46,7 +92,17 @@ h6 {
 	line-height: 1.2;
 }
 h1 {
-	font-size: 3.052em;
+	/* Scales down on narrow screens so long titles don't wrap onto three lines */
+	font-size: clamp(2.2em, 9vw, 3.052em);
+}
+/* Section heading underline in the theme's colours */
+.stripe {
+	display: block;
+	width: 5rem;
+	height: 6px;
+	margin: 0.75rem 0 1.5rem;
+	border-radius: 3px;
+	background: var(--stripe);
 }
 h2 {
 	font-size: 2.441em;
@@ -66,9 +122,18 @@ b {
 }
 a {
 	color: var(--accent);
+	text-underline-offset: 0.2em;
+	transition:
+		color var(--speed) var(--ease),
+		text-decoration-color var(--speed) var(--ease);
 }
 a:hover {
-	color: var(--accent);
+	color: var(--accent-dark);
+}
+:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+	border-radius: 2px;
 }
 p {
 	margin-bottom: 1em;
@@ -206,4 +271,18 @@ hr {
 	clip-path: inset(50%);
 	/* added line to stop words getting smushed together (as they go onto separate lines and some screen readers do not understand line feeds as a space */
 	white-space: nowrap;
+}
+
+/* Respect the "reduce motion" accessibility setting: no animations or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
 }

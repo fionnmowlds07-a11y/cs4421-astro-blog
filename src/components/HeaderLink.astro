@@ -11,14 +11,49 @@ const isActive = href === pathname || href === '/' + (subpath?.[0] || '');
 
 <a href={href} class:list={[className, { active: isActive }]} {...props}>
 	<slot />
+	{/* Only the active tab renders the indicator; its shared transition name lets the browser slide it to the new tab. */}
+	{isActive && <span class="indicator" transition:name="tab-indicator" aria-hidden="true" />}
 </a>
 <style>
+	/* All tabs keep the same font weight so widths never change; the active one is just fully opaque. */
 	a {
+		position: relative;
 		display: inline-block;
+		padding: 1em 0.6em;
+		color: var(--header-text);
 		text-decoration: none;
+		opacity: 0.7;
+		transition: opacity var(--speed) var(--ease);
 	}
+	a:hover,
 	a.active {
-		font-weight: bolder;
-		text-decoration: underline;
+		opacity: 1;
+	}
+	/* Hover hint: a half-width underline growing from the centre (not shown on the active tab). */
+	a::after,
+	.indicator {
+		position: absolute;
+		left: 0.6em;
+		right: 0.6em;
+		bottom: 0;
+		height: 3px;
+		border-radius: 3px;
+		background: var(--header-accent);
+	}
+	a::after {
+		content: '';
+		transform: scaleX(0);
+		opacity: 0.5;
+		transition: transform var(--speed) var(--ease);
+	}
+	a:not(.active):hover::after {
+		transform: scaleX(0.5);
+	}
+	@media (max-width: 720px) {
+		a {
+			padding: 0.6em;
+			font-size: 0.9em;
+			white-space: nowrap;
+		}
 	}
 </style>
