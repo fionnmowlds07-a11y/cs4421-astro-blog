@@ -12,8 +12,9 @@ export default defineConfig({
     adapter: node({
         mode: 'standalone',
     }),
-    // The blog moved to /about-me; keep old links (and RSS readers) working.
+    // The blog moved to /about-me and replaced the template /about page; keep old links (and RSS readers) working.
     redirects: {
+        '/about': '/about-me',
         '/blog': '/about-me',
         '/blog/[...slug]': '/about-me/[...slug]',
     },
