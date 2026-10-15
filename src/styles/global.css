@@ -92,7 +92,8 @@ h6 {
 	line-height: 1.2;
 }
 h1 {
-	font-size: 3.052em;
+	/* Scales down on narrow screens so long titles don't wrap onto three lines */
+	font-size: clamp(2.2em, 9vw, 3.052em);
 }
 /* Section heading underline in the theme's colours */
 .stripe {

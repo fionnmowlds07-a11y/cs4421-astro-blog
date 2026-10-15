@@ -14,19 +14,100 @@ import { SITE_DESCRIPTION, SITE_TITLE } from '../consts';
 	<body>
 		<Header />
 		<main>
-			<h1>Hi, I'm Fionn</h1>
-			<p>
-				My name is Fionn Mowlds. I am a current student in Immersive Software Engineering (LM173) at the
-				University of Limerick. As well as this, I am a devoted rower and have previously represented
-				Ireland internationally.
+			<h1>{SITE_TITLE}</h1>
+			<span class="stripe" aria-hidden="true"></span>
+			<p class="lead">
+				Follow Manchester United's season and my rowing training in one place. Pick a section to get
+				started, or read more <a href="/about-me">about me</a>.
 			</p>
-			<h2>On this site</h2>
-			<ul>
-				<li><a href="/man-united">Man United</a>: league position, results, fixtures and top scorers.</li>
-				<li><a href="/rowing">Rowing</a>: my training log, with sessions, splits and personal bests.</li>
-				<li><a href="/about-me">About Me</a>: posts about me, what I'm working on and where I'm headed.</li>
-			</ul>
+			<div class="cards">
+				<a class="card united" href="/man-united">
+					<span class="card-stripe" aria-hidden="true"></span>
+					<h2>Man United</h2>
+					<p>League position, recent results, upcoming fixtures and top scorers.</p>
+					<span class="card-link">View stats <span aria-hidden="true">&rarr;</span></span>
+				</a>
+				<a class="card rowing" href="/rowing">
+					<span class="card-stripe" aria-hidden="true"></span>
+					<h2>Rowing</h2>
+					<p>My training log, with sessions, splits and personal bests.</p>
+					<span class="card-link">View training <span aria-hidden="true">&rarr;</span></span>
+				</a>
+			</div>
 		</main>
 		<Footer />
 	</body>
 </html>
+<style>
+	.lead {
+		font-size: 1.15em;
+		max-width: 36em;
+	}
+	.cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: 1.5rem;
+		margin-top: 2.5rem;
+	}
+	/* Each card previews its section's theme: black card, coloured stripe and link. */
+	.card {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 2rem 1.75rem 1.75rem;
+		border-radius: 14px;
+		overflow: hidden;
+		background: #0a0a0a;
+		color: rgba(255, 255, 255, 0.8);
+		text-decoration: none;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+		transition:
+			transform var(--speed) var(--ease),
+			box-shadow var(--speed) var(--ease);
+	}
+	.card:hover,
+	.card:focus-visible {
+		transform: translateY(-4px);
+		box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
+		color: rgba(255, 255, 255, 0.8);
+	}
+	.card h2 {
+		margin: 0;
+		font-size: 1.8em;
+		color: #ffffff;
+	}
+	.card p {
+		margin: 0;
+		font-size: 0.9em;
+	}
+	.card-stripe {
+		position: absolute;
+		inset: 0 0 auto 0;
+		height: 6px;
+	}
+	.card-link {
+		margin-top: auto;
+		padding-top: 1rem;
+		font-weight: 700;
+	}
+	.card-link span {
+		display: inline-block;
+		transition: transform var(--speed) var(--ease);
+	}
+	.card:hover .card-link span {
+		transform: translateX(4px);
+	}
+	.united .card-stripe {
+		background: linear-gradient(90deg, #da291c 0 60%, #fbe122 60%);
+	}
+	.united .card-link {
+		color: #fbe122;
+	}
+	.rowing .card-stripe {
+		background: #1fc764;
+	}
+	.rowing .card-link {
+		color: #1fc764;
+	}
+</style>
