@@ -1,0 +1,311 @@
+---
+// The full Premier League table. Overall/Home/Away and column sorting are plain links (?view=…&sort=…&dir=…),
+// so they work without JavaScript, can be shared, and are server-rendered from the cached league data.
+export const prerender = false;
+import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
+import { MAN_UNITED_ID } from '../../lib/football';
+import { getPremierLeagueData, type PremierLeagueData, type TableRow, type Venue } from '../../lib/league';
+
+let data: PremierLeagueData | null = null;
+if (FOOTBALL_DATA_API_KEY) {
+	try {
+		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
+	} catch {
+		// The /api/premier-league/summary endpoint logs upstream failures; the page just shows the fallback.
+	}
+}
+
+if (data) {
+	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+}
+
+const views: { value: Venue; label: string }[] = [
+	{ value: 'all', label: 'Overall' },
+	{ value: 'home', label: 'Home' },
+	{ value: 'away', label: 'Away' },
+];
+const columns = [
+	{ key: 'played', label: 'P', title: 'Played' },
+	{ key: 'won', label: 'W', title: 'Won' },
+	{ key: 'drawn', label: 'D', title: 'Drawn' },
+	{ key: 'lost', label: 'L', title: 'Lost' },
+	{ key: 'goalsFor', label: 'GF', title: 'Goals for' },
+	{ key: 'goalsAgainst', label: 'GA', title: 'Goals against' },
+	{ key: 'goalDifference', label: 'GD', title: 'Goal difference' },
+	{ key: 'points', label: 'Pts', title: 'Points' },
+] as const;
+type SortKey = (typeof columns)[number]['key'];
+type Direction = 'asc' | 'desc';
+
+// Unknown query values fall back to the defaults (overall table, in league order).
+const params = Astro.url.searchParams;
+const view = views.find((v) => v.value === params.get('view'))?.value ?? 'all';
+const sort = columns.find((c) => c.key === params.get('sort'))?.key ?? null;
+const dir: Direction = params.get('dir') === 'asc' ? 'asc' : 'desc';
+
+function tableHref(next: { view?: Venue; sort?: SortKey | null; dir?: Direction }) {
+	const query = new URLSearchParams();
+	const nextView = next.view ?? view;
+	const nextSort = next.sort === undefined ? sort : next.sort;
+	const nextDir = next.dir ?? dir;
+	if (nextView !== 'all') query.set('view', nextView);
+	if (nextSort) query.set('sort', nextSort);
+	if (nextSort && nextDir === 'asc') query.set('dir', 'asc');
+	const search = query.toString();
+	return `/man-united/table${search ? `?${search}` : ''}`;
+}
+
+// Clicking a column sorts highest first; clicking it again flips to lowest first.
+const sortHref = (key: SortKey) => tableHref({ sort: key, dir: sort === key && dir === 'desc' ? 'asc' : 'desc' });
+
+const table: TableRow[] = data?.tables[view] ?? [];
+const rows = sort
+	? [...table].sort((a, b) => (a[sort] - b[sort]) * (dir === 'asc' ? 1 : -1) || a.position - b.position)
+	: table;
+// The bottom three of the overall table are relegated; marked only when it's shown in league order.
+const relegationFrom = view === 'all' && !sort ? table.length - 2 : Infinity;
+
+const outcomeLabel = { W: 'Win', D: 'Draw', L: 'Loss' } as const;
+const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+---
+
+<ManUnitedLayout
+	title="Premier League table"
+	heading="Premier League table"
+	description="The full Premier League table, overall, home and away, with Manchester United highlighted."
+>
+	{
+		!data ? (
+			<p class="fallback" data-testid="stats-unavailable">
+				Live stats are unavailable right now. Please check back soon.
+			</p>
+		) : (
+			<>
+				<div class="toolbar">
+					<div class="views" role="group" aria-label="Table view">
+						{views.map((v) => (
+							<a href={tableHref({ view: v.value })} aria-current={v.value === view ? 'true' : undefined}>
+								{v.label}
+							</a>
+						))}
+					</div>
+					{sort && (
+						<a class="reset" href={tableHref({ sort: null })}>
+							Back to league order
+						</a>
+					)}
+				</div>
+
+				<div class="table-wrap" role="region" aria-label="Premier League table">
+					<table class="league-table" data-testid="league-table">
+						<thead>
+							<tr>
+								<th scope="col" class="pos">
+									<abbr title="Position">#</abbr>
+								</th>
+								<th scope="col" class="club">Club</th>
+								{columns.map((c) => (
+									<th
+										scope="col"
+										class:list={['num', { sorted: sort === c.key }]}
+										aria-sort={sort === c.key ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+									>
+										<a href={sortHref(c.key)} title={`Sort by ${c.title.toLowerCase()}`}>
+											<abbr title={c.title}>{c.label}</abbr>
+											{sort === c.key && <span aria-hidden="true">{dir === 'asc' ? '▲' : '▼'}</span>}
+										</a>
+									</th>
+								))}
+								<th scope="col" class="form">Form</th>
+							</tr>
+						</thead>
+						<tbody>
+							{rows.map((row) => (
+								<tr
+									class:list={{ united: row.team.id === MAN_UNITED_ID, relegation: row.position === relegationFrom }}
+									data-testid={row.team.id === MAN_UNITED_ID ? 'united-row' : undefined}
+								>
+									<td class="pos">{row.position}</td>
+									<th scope="row" class="club">
+										<span class="club-inner">
+											<img src={row.team.crest} alt="" width="20" height="20" loading="lazy" />
+											<span class="name">{row.team.shortName}</span>
+											<abbr class="tla" title={row.team.shortName}>
+												{row.team.tla}
+											</abbr>
+										</span>
+									</th>
+									{columns.map((c) => (
+										<td class:list={['num', { sorted: sort === c.key }]}>
+											{c.key === 'goalDifference' ? signed(row.goalDifference) : row[c.key]}
+										</td>
+									))}
+									<td class="form">
+										<span class="badges" aria-label={`Form: ${row.form.map((o) => outcomeLabel[o]).join(', ') || 'no games'}`}>
+											{row.form.map((o) => (
+												<span class={`badge small ${o}`} aria-hidden="true">
+													{o}
+												</span>
+											))}
+										</span>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+
+				<p class="note">
+					{view === 'all' ? 'Overall table' : view === 'home' ? 'Home games only' : 'Away games only'}. Form is the
+					last five games, oldest first.
+					{relegationFrom !== Infinity && ' The line marks the relegation zone.'}
+				</p>
+				<p class="updated">
+					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org
+				</p>
+			</>
+		)
+	}
+</ManUnitedLayout>
+
+<style>
+	.toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+	/* Segmented control: Overall / Home / Away */
+	.views {
+		display: inline-flex;
+		padding: 0.25rem;
+		border-radius: 999px;
+		background: rgba(var(--gray-light), 70%);
+	}
+	.views a {
+		padding: 0.3rem 1rem;
+		border-radius: 999px;
+		font-size: 0.8em;
+		font-weight: 700;
+		text-decoration: none;
+		color: rgb(var(--gray-dark));
+		transition:
+			background-color var(--speed) var(--ease),
+			color var(--speed) var(--ease);
+	}
+	.views a[aria-current='true'] {
+		background: var(--accent);
+		color: #ffffff;
+	}
+	.reset {
+		font-size: 0.8em;
+	}
+	/* Wide tables scroll sideways inside their own box on phones, not the whole page */
+	.table-wrap {
+		overflow-x: auto;
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+	}
+	.league-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8em;
+		font-variant-numeric: tabular-nums;
+	}
+	.league-table th,
+	.league-table td {
+		padding: 0.55rem 0.5rem;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+		white-space: nowrap;
+	}
+	.league-table tbody tr:last-child > * {
+		border-bottom: none;
+	}
+	.league-table thead th {
+		font-size: 0.8em;
+		text-transform: uppercase;
+		color: rgb(var(--gray));
+		background: rgba(var(--gray-light), 35%);
+	}
+	.league-table thead a {
+		color: inherit;
+		text-decoration: none;
+	}
+	.league-table thead a:hover,
+	.league-table thead .sorted a {
+		color: var(--accent);
+	}
+	abbr {
+		text-decoration: none;
+	}
+	.pos {
+		width: 2rem;
+		text-align: center;
+		color: rgb(var(--gray));
+	}
+	.club {
+		text-align: left;
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	/* One inline-flex box, so the column is always at least as wide as crest + name */
+	.club-inner {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	/* The global img max-width: 100% would let the table squash crests to nothing when sizing columns */
+	.club img {
+		max-width: none;
+		flex-shrink: 0;
+		object-fit: contain;
+	}
+	.club .tla {
+		display: none;
+	}
+	.num {
+		text-align: right;
+	}
+	td.sorted {
+		font-weight: 700;
+		background: rgba(218, 41, 28, 5%);
+	}
+	th.form,
+	td.form {
+		text-align: left;
+	}
+	.badges {
+		display: inline-flex;
+		gap: 0.2rem;
+	}
+	/* Man United's row: United yellow wash with a red edge */
+	tr.united > * {
+		background: rgba(251, 225, 34, 28%);
+	}
+	tr.united > :first-child {
+		box-shadow: inset 4px 0 0 var(--accent);
+		color: rgb(var(--black));
+		font-weight: 700;
+	}
+	tr.relegation > * {
+		border-top: 2px dashed rgba(218, 41, 28, 55%);
+	}
+	/* Phones: three-letter club codes instead of names */
+	@media (max-width: 600px) {
+		.club .name {
+			display: none;
+		}
+		.club .tla {
+			display: inline;
+		}
+		.league-table th,
+		.league-table td {
+			padding: 0.5rem 0.35rem;
+		}
+	}
+</style>

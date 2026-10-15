@@ -1,0 +1,57 @@
+/* Shared styles for the Man United section's stats pages (loaded by ManUnitedLayout). */
+
+.fallback {
+	padding: 1.25rem 1.5rem;
+	border-left: 4px solid var(--accent);
+	background: var(--surface);
+	border-radius: 8px;
+}
+.panel {
+	padding: 1.5rem;
+	border-radius: 14px;
+	background: var(--surface);
+	box-shadow: 0 1px 3px rgba(var(--black), 8%);
+}
+.panel h2 {
+	font-size: 1.1em;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 1rem;
+}
+/* Result badges: W green, D grey, L red */
+.badge {
+	display: inline-grid;
+	place-items: center;
+	width: 1.7rem;
+	height: 1.7rem;
+	border-radius: 6px;
+	font-size: 0.75em;
+	font-weight: 700;
+	color: #ffffff;
+}
+.badge.small {
+	width: 1.25rem;
+	height: 1.25rem;
+	border-radius: 4px;
+	font-size: 0.65em;
+}
+.badge.W {
+	background: #1a7f37;
+}
+.badge.D {
+	background: #6b7280;
+}
+.badge.L {
+	background: #da291c;
+}
+.note,
+.updated {
+	font-size: 0.75em;
+	color: rgb(var(--gray));
+	margin: 0.75rem 0 0;
+}
+@media (max-width: 600px) {
+	.panel {
+		padding: 1.25rem;
+	}
+}
