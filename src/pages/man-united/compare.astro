@@ -1,0 +1,460 @@
+---
+// Any Premier League team side by side with Man United: every team stat, this season's head-to-head
+// and both teams' league position by matchday. The team comes from ?team=<three-letter code> and is
+// picked with a plain GET form, so it works without JavaScript and the URL can be shared.
+export const prerender = false;
+import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import PositionChart from '../../components/PositionChart.astro';
+import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
+import { MAN_UNITED_ID } from '../../lib/football';
+import { getPremierLeagueData, type PremierLeagueData, rankFor, STAT_METRICS } from '../../lib/league';
+
+let data: PremierLeagueData | null = null;
+if (FOOTBALL_DATA_API_KEY) {
+	try {
+		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
+	} catch {
+		// The /api/premier-league/summary endpoint logs upstream failures; the page just shows the fallback.
+	}
+}
+
+if (data) {
+	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+}
+
+const table = data?.tables.all ?? [];
+const united = table.find((row) => row.team.id === MAN_UNITED_ID);
+const others = table.filter((row) => row.team.id !== MAN_UNITED_ID);
+// Unknown or missing ?team= falls back to the league leader (or the runner-up if that's United).
+const requested = Astro.url.searchParams.get('team')?.toLowerCase();
+const opponent = others.find((row) => row.team.tla.toLowerCase() === requested) ?? others[0];
+
+const ordinal = (n: number) => {
+	const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+	return `${n}${suffix}`;
+};
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+const outcomeLabel = { W: 'Win', D: 'Draw', L: 'Loss' } as const;
+
+// One row per stat. Each bar shows where that team sits between the league's worst (empty) and best (full).
+const goodness = (value: number, best: number, worst: number) =>
+	best === worst ? 100 : Math.round(((value - worst) / (best - worst)) * 100);
+const comparisons =
+	data && united && opponent
+		? STAT_METRICS.map((metric) => {
+				const u = rankFor(data.stats, metric, MAN_UNITED_ID);
+				const o = rankFor(data.stats, metric, opponent.team.id);
+				if (!u || !o) return null;
+				const better = u.value === o.value ? 'tie' : (u.value > o.value) === (metric.better === 'high') ? 'united' : 'opponent';
+				return { metric, u, o, better, uBar: goodness(u.value, u.best, u.worst), oBar: goodness(o.value, o.best, o.worst) };
+			}).filter((c) => c !== null)
+		: [];
+const unitedWins = comparisons.filter((c) => c.better === 'united').length;
+const opponentWins = comparisons.filter((c) => c.better === 'opponent').length;
+
+const meetings = data && opponent ? (data.headToHead[opponent.team.id] ?? []) : [];
+
+const history = data?.positionHistory;
+const chartSeries =
+	history && united && opponent
+		? [united, opponent].map((row) => ({
+				label: row.team.shortName,
+				short: row.team.tla,
+				color: row.team.id === MAN_UNITED_ID ? 'var(--united-series)' : 'var(--opponent-series)',
+				positions: history.teams.find((t) => t.team.id === row.team.id)?.positions ?? [],
+			}))
+		: [];
+
+const teamOptions = [...others].sort((a, b) => a.team.shortName.localeCompare(b.team.shortName));
+const dateFormat = new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Dublin' });
+const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+---
+
+<ManUnitedLayout
+	title={opponent ? `Man United vs ${opponent.team.shortName}` : 'Compare teams'}
+	heading="Compare"
+	description="Compare any Premier League team with Manchester United: stats, head-to-head and league position."
+>
+	{
+		!data || !united || !opponent ? (
+			<p class="fallback" data-testid="stats-unavailable">
+				Live stats are unavailable right now. Please check back soon.
+			</p>
+		) : (
+			<div class="compare" data-testid="compare">
+				<form class="picker" method="get" action="/man-united/compare">
+					<label for="team">Compare Man United with</label>
+					<select id="team" name="team">
+						{teamOptions.map((row) => (
+							<option value={row.team.tla.toLowerCase()} selected={row.team.id === opponent.team.id}>
+								{row.team.shortName} ({ordinal(row.position)})
+							</option>
+						))}
+					</select>
+					<button type="submit">Compare</button>
+				</form>
+
+				<section class="teams" aria-label="League standing">
+					{[united, opponent].map((row) => (
+						<div class:list={['team-card', { united: row.team.id === MAN_UNITED_ID }]}>
+							<img src={row.team.crest} alt="" width="44" height="44" />
+							<div>
+								<h2>{row.team.shortName}</h2>
+								<p class="standing">
+									<strong>{ordinal(row.position)}</strong> · {row.points} pts · GD {signed(row.goalDifference)}
+								</p>
+								<ol class="form" aria-label={`Form, oldest to newest: ${row.form.map((o) => outcomeLabel[o]).join(', ')}`}>
+									{row.form.map((o) => (
+										<li class={`badge small ${o}`} aria-hidden="true">
+											{o}
+										</li>
+									))}
+								</ol>
+							</div>
+						</div>
+					))}
+				</section>
+
+				<section class="panel" aria-labelledby="stats-heading">
+					<h2 id="stats-heading">Stats</h2>
+					<p class="score-line" data-testid="compare-summary">
+						Man United better in <strong>{unitedWins}</strong>, {opponent.team.shortName} better in{' '}
+						<strong>{opponentWins}</strong> of {comparisons.length}
+					</p>
+					<ul class="stat-rows">
+						{comparisons.map((c) => (
+							<li>
+								<span class:list={['val', 'left', { better: c.better === 'united' }]}>
+									{c.metric.format(c.u.value)}
+									<small>
+										{c.u.tied ? '=' : ''}
+										{ordinal(c.u.rank)}
+									</small>
+								</span>
+								<span class="stat-label" title={c.metric.hint}>
+									{c.metric.label}
+								</span>
+								<span class:list={['val', 'right', { better: c.better === 'opponent' }]}>
+									{c.metric.format(c.o.value)}
+									<small>
+										{c.o.tied ? '=' : ''}
+										{ordinal(c.o.rank)}
+									</small>
+								</span>
+								<span class="bars" aria-hidden="true">
+									<span class="bar united-bar">
+										<span style={`width: ${c.uBar}%`} />
+									</span>
+									<span class="bar opponent-bar">
+										<span style={`width: ${c.oBar}%`} />
+									</span>
+								</span>
+							</li>
+						))}
+					</ul>
+					<p class="note">
+						Bold is the better of the two. Small numbers are league ranks. Bars run from the league's worst (empty) to
+						best (full).
+					</p>
+				</section>
+
+				<section class="panel" aria-labelledby="h2h-heading">
+					<h2 id="h2h-heading">Head-to-head this season</h2>
+					{meetings.length === 0 ? (
+						<p class="note">No league meetings this season.</p>
+					) : (
+						<ul class="meetings" data-testid="head-to-head">
+							{meetings.map((m) => (
+								<li>
+									<span class="date">{dateFormat.format(new Date(m.date))}</span>
+									<span class="fixture">
+										<span class="side home">
+											{m.home.shortName}
+											<img src={m.home.crest} alt="" width="22" height="22" loading="lazy" />
+										</span>
+										<span class="score">{m.score ? `${m.score.home}–${m.score.away}` : 'v'}</span>
+										<span class="side">
+											<img src={m.away.crest} alt="" width="22" height="22" loading="lazy" />
+											{m.away.shortName}
+										</span>
+									</span>
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+
+				{history && history.matchdays.length > 0 && (
+					<section class="panel chart-panel" aria-labelledby="position-heading">
+						<h2 id="position-heading">League position by matchday</h2>
+						<PositionChart
+							class="wide"
+							matchdays={history.matchdays}
+							series={chartSeries}
+							teamCount={table.length}
+							width={820}
+							height={300}
+						/>
+						<PositionChart
+							class="narrow"
+							matchdays={history.matchdays}
+							series={chartSeries}
+							teamCount={table.length}
+							width={340}
+							height={260}
+						/>
+					</section>
+				)}
+
+				<p class="updated">
+					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org · Premier League
+					games only
+				</p>
+			</div>
+		)
+	}
+</ManUnitedLayout>
+
+<script>
+	// Progressive enhancement: pick a team and the page updates straight away (the button still works without JS).
+	// Set up now and after every View Transitions navigation, as this script can run after the first astro:page-load.
+	const init = () => {
+		const select = document.querySelector<HTMLSelectElement>('.picker select:not([data-ready])');
+		if (!select) return;
+		select.dataset.ready = '';
+		select.addEventListener('change', () => select.form?.requestSubmit());
+	};
+	init();
+	document.addEventListener('astro:page-load', init);
+</script>
+
+<style>
+	.compare {
+		/* Series colours, checked for colour-blind separation: United red and a contrasting blue */
+		--united-series: #da291c;
+		--opponent-series: #2a78d6;
+		display: grid;
+		gap: 1.25rem;
+	}
+	.picker {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 0.75rem;
+		font-size: 0.85em;
+	}
+	.picker label {
+		font-weight: 700;
+	}
+	.picker select,
+	.picker button {
+		font: inherit;
+		padding: 0.35rem 0.75rem;
+		border-radius: 8px;
+		border: 1px solid rgba(var(--gray-light), 100%);
+		background: var(--surface);
+		color: rgb(var(--black));
+	}
+	.picker button {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #ffffff;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.teams {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
+	.team-card {
+		display: flex;
+		align-items: center;
+		gap: 0.9rem;
+		padding: 1rem 1.25rem;
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+		border-top: 4px solid var(--opponent-series);
+	}
+	.team-card.united {
+		border-top-color: var(--united-series);
+	}
+	.team-card img {
+		max-width: none;
+		object-fit: contain;
+	}
+	.team-card h2 {
+		margin: 0;
+		font-size: 1.2em;
+	}
+	.standing {
+		margin: 0.1rem 0 0.35rem;
+		font-size: 0.8em;
+		color: rgb(var(--gray));
+	}
+	.standing strong {
+		color: rgb(var(--black));
+	}
+	.form {
+		display: flex;
+		gap: 0.2rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.score-line {
+		margin: -0.5rem 0 1rem;
+		font-size: 0.85em;
+		color: rgb(var(--gray));
+	}
+	.score-line strong {
+		color: rgb(var(--black));
+	}
+	.stat-rows {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	/* value | label | value, with a pair of bars underneath */
+	.stat-rows li {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: baseline;
+		gap: 0.15rem 1rem;
+		padding: 0.6rem 0;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	}
+	.stat-rows li:last-child {
+		border-bottom: none;
+	}
+	.val {
+		font-variant-numeric: tabular-nums;
+		color: rgb(var(--gray));
+	}
+	.val.left {
+		text-align: left;
+	}
+	.val.right {
+		text-align: right;
+	}
+	.val.better {
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	.val small {
+		margin: 0 0.35rem;
+		font-size: 0.65em;
+		font-weight: 400;
+		color: rgb(var(--gray));
+	}
+	.stat-label {
+		font-size: 0.75em;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		text-align: center;
+		color: rgb(var(--gray-dark));
+	}
+	.bars {
+		grid-column: 1 / -1;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 2px;
+	}
+	.bar {
+		display: flex;
+		height: 6px;
+		background: rgba(var(--gray-light), 100%);
+	}
+	.bar span {
+		display: block;
+		height: 100%;
+	}
+	/* United's bar grows leftwards from the middle, the opponent's rightwards */
+	.united-bar {
+		justify-content: flex-end;
+		border-radius: 3px 0 0 3px;
+	}
+	.united-bar span {
+		background: var(--united-series);
+		border-radius: 3px 0 0 3px;
+	}
+	.opponent-bar {
+		border-radius: 0 3px 3px 0;
+	}
+	.opponent-bar span {
+		background: var(--opponent-series);
+		border-radius: 0 3px 3px 0;
+	}
+	.meetings {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 0.85em;
+	}
+	.meetings li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 1rem;
+		padding: 0.6rem 0;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	}
+	.meetings li:last-child {
+		border-bottom: none;
+	}
+	.date {
+		min-width: 7rem;
+		color: rgb(var(--gray));
+	}
+	.fixture {
+		flex: 1;
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: 0.75rem;
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	.side {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.side.home {
+		justify-content: flex-end;
+	}
+	.side img {
+		max-width: none;
+		object-fit: contain;
+	}
+	.score {
+		min-width: 3rem;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+	}
+	.chart-panel :global(.narrow) {
+		display: none;
+	}
+	.updated {
+		margin: 0;
+	}
+	@media (max-width: 600px) {
+		.teams {
+			grid-template-columns: 1fr;
+		}
+		.team-card {
+			padding: 0.8rem 1rem;
+		}
+		.date {
+			flex-basis: 100%;
+			font-size: 0.85em;
+		}
+		.chart-panel :global(.wide) {
+			display: none;
+		}
+		.chart-panel :global(.narrow) {
+			display: block;
+		}
+	}
+</style>
