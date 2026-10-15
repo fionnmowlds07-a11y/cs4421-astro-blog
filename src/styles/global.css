@@ -19,9 +19,10 @@
 	--gray-dark: 33, 37, 43;
 	--accent: #111214;
 	--accent-dark: #000000;
-	--header-bg: rgba(255, 255, 255, 0.85);
-	--header-text: #111214;
-	--header-accent: #111214;
+	/* Header is black on every page; sections only change its accent colour */
+	--header-bg: rgba(10, 10, 10, 0.92);
+	--header-text: #ffffff;
+	--header-accent: #ffffff;
 	--gray-gradient: rgba(var(--gray-light), 50%), var(--bg);
 	--box-shadow:
 		0 2px 6px rgba(var(--gray), 25%), 0 8px 24px rgba(var(--gray), 33%),
@@ -34,24 +35,20 @@
 	--ease: cubic-bezier(0.22, 1, 0.36, 1);
 	--speed: 220ms;
 }
-/* Man United: black header with yellow highlight, red accents. */
+/* Man United: yellow tab highlight, red accents. */
 [data-theme='united'] {
 	--bg: #ffffff;
 	--accent: #da291c;
 	--accent-dark: #a51d13;
-	--header-bg: rgba(10, 10, 10, 0.92);
-	--header-text: #ffffff;
 	--header-accent: #fbe122;
 	--stripe: linear-gradient(90deg, #da291c 0 60%, #fbe122 60% 80%, #0a0a0a 80%);
 	--gray-gradient: rgba(218, 41, 28, 8%), var(--bg);
 }
-/* Rowing: UL green on black (shades shared with the UL Erg app). */
+/* Rowing: UL green (shades shared with the UL Erg app). */
 [data-theme='rowing'] {
 	--bg: #ffffff;
 	--accent: #117a3e;
 	--accent-dark: #0c5e2f;
-	--header-bg: rgba(5, 7, 6, 0.92);
-	--header-text: #ffffff;
 	--header-accent: #1fc764;
 	--stripe: linear-gradient(90deg, #1fc764 0 70%, #050706 70%);
 	--gray-gradient: rgba(31, 199, 100, 10%), var(--bg);
