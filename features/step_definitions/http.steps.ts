@@ -1,20 +1,7 @@
 import assert from 'node:assert/strict';
 import { Then, When } from '@cucumber/cucumber';
+import { send } from '../support/http.ts';
 import type { ApiWorld } from '../support/world.ts';
-
-async function send(world: ApiWorld, method: string, path: string, body?: string) {
-	world.response = await fetch(new URL(path, world.baseUrl), {
-		method,
-		headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-		body,
-	});
-	const text = await world.response.text();
-	try {
-		world.body = JSON.parse(text);
-	} catch {
-		world.body = text;
-	}
-}
 
 function field(world: ApiWorld, name: string): unknown {
 	assert.ok(world.body && typeof world.body === 'object', 'response body is not a JSON object');
