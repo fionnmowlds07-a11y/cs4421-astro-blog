@@ -1,10 +1,41 @@
 ---
-// Placeholder shell; becomes server-rendered once live stats are added.
-export const prerender = true;
+// Server-rendered on each request; the football client caches API data for 10 minutes.
+export const prerender = false;
+import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
 import BaseHead from '../../components/BaseHead.astro';
 import Footer from '../../components/Footer.astro';
 import Header from '../../components/Header.astro';
 import { SITE_TITLE } from '../../consts';
+import { getManUnitedSummary, type ManUnitedSummary } from '../../lib/football';
+
+let summary: ManUnitedSummary | null = null;
+if (FOOTBALL_DATA_API_KEY) {
+	try {
+		summary = await getManUnitedSummary(FOOTBALL_DATA_API_KEY);
+	} catch {
+		// The /api/man-united/summary endpoint logs upstream failures; the page just shows the fallback.
+	}
+}
+
+if (summary) {
+	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+}
+
+const dateFormat = new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
+const kickOffFormat = new Intl.DateTimeFormat('en-IE', {
+	weekday: 'short',
+	day: 'numeric',
+	month: 'short',
+	hour: '2-digit',
+	minute: '2-digit',
+	timeZone: 'Europe/Dublin',
+});
+const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+const outcomeLabel = { W: 'Win', D: 'Draw', L: 'Loss' } as const;
+const ordinal = (n: number) => {
+	const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+	return `${n}${suffix}`;
+};
 ---
 
 <!doctype html>
@@ -17,8 +48,313 @@ import { SITE_TITLE } from '../../consts';
 		<main>
 			<h1>Man United</h1>
 			<span class="stripe" aria-hidden="true"></span>
-			<p>League position, recent results, upcoming fixtures and top scorers are coming soon.</p>
+
+			{
+				!summary ? (
+					<p class="fallback" data-testid="stats-unavailable">
+						Live stats are unavailable right now. Please check back soon.
+					</p>
+				) : (
+					<div class="stats" data-testid="stats">
+						{summary.league && (
+							<section class="panel league" aria-labelledby="league-heading">
+								<h2 id="league-heading">Premier League</h2>
+								<div class="position">
+									<span class="position-number">{ordinal(summary.league.position)}</span>
+									<span class="points">{summary.league.points} pts</span>
+								</div>
+								<dl class="record">
+									<div><dt>Played</dt><dd>{summary.league.played}</dd></div>
+									<div><dt>Won</dt><dd>{summary.league.won}</dd></div>
+									<div><dt>Drawn</dt><dd>{summary.league.drawn}</dd></div>
+									<div><dt>Lost</dt><dd>{summary.league.lost}</dd></div>
+									<div>
+										<dt>Goal diff.</dt>
+										<dd>{summary.league.goalDifference > 0 ? `+${summary.league.goalDifference}` : summary.league.goalDifference}</dd>
+									</div>
+								</dl>
+								{summary.form.length > 0 && (
+									<div class="form">
+										<span class="label">Form</span>
+										<ol aria-label="Form, oldest to newest">
+											{summary.form.map((outcome) => (
+												<li class={`badge ${outcome}`} title={outcomeLabel[outcome]}>
+													{outcome}
+												</li>
+											))}
+										</ol>
+									</div>
+								)}
+							</section>
+						)}
+
+						<section class="panel" aria-labelledby="results-heading">
+							<h2 id="results-heading">Recent results</h2>
+							<ul class="matches">
+								{summary.recentResults.map((r) => (
+									<li>
+										<span class="date">{dateFormat.format(new Date(r.date))}</span>
+										<span class="comp">{r.competition}</span>
+										<span class="opponent">
+											<img src={r.opponentCrest} alt="" width="22" height="22" loading="lazy" />
+											{r.venue === 'H' ? 'vs' : 'at'} {r.opponent}
+										</span>
+										<span class="score">
+											{r.goalsFor}–{r.goalsAgainst}
+										</span>
+										<span class={`badge ${r.outcome}`} title={outcomeLabel[r.outcome]}>
+											{r.outcome}
+										</span>
+									</li>
+								))}
+							</ul>
+						</section>
+
+						<section class="panel" aria-labelledby="fixtures-heading">
+							<h2 id="fixtures-heading">Upcoming fixtures</h2>
+							<ul class="matches">
+								{summary.upcomingFixtures.map((f) => (
+									<li>
+										<span class="date">{kickOffFormat.format(new Date(f.date))}</span>
+										<span class="comp">{f.competition}</span>
+										<span class="opponent">
+											<img src={f.opponentCrest} alt="" width="22" height="22" loading="lazy" />
+											{f.venue === 'H' ? 'vs' : 'at'} {f.opponent}
+										</span>
+									</li>
+								))}
+							</ul>
+						</section>
+
+						{summary.topScorers.length > 0 && (
+							<section class="panel" aria-labelledby="scorers-heading">
+								<h2 id="scorers-heading">Top scorers</h2>
+								<table class="scorers">
+									<thead>
+										<tr>
+											<th scope="col">Player</th>
+											<th scope="col">Goals</th>
+											<th scope="col">Assists</th>
+										</tr>
+									</thead>
+									<tbody>
+										{summary.topScorers.map((s) => (
+											<tr>
+												<th scope="row">{s.name}</th>
+												<td>{s.goals}</td>
+												<td>{s.assists}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+								<p class="note">Premier League goals and assists.</p>
+							</section>
+						)}
+
+						<p class="updated">
+							Updated {updatedFormat.format(new Date(summary.updatedAt))} · Data from football-data.org
+						</p>
+					</div>
+				)
+			}
 		</main>
 		<Footer />
 	</body>
 </html>
+
+<style>
+	main {
+		width: 860px;
+	}
+	.fallback {
+		padding: 1.25rem 1.5rem;
+		border-left: 4px solid var(--accent);
+		background: var(--surface);
+		border-radius: 8px;
+	}
+	.stats {
+		display: grid;
+		/* min() lets a column shrink to the screen width on phones instead of overflowing */
+		grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
+		gap: 1.25rem;
+	}
+	.panel {
+		padding: 1.5rem;
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+	}
+	.panel h2 {
+		font-size: 1.1em;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-bottom: 1rem;
+	}
+	.league {
+		background: #0a0a0a;
+		color: rgba(255, 255, 255, 0.85);
+	}
+	.league h2 {
+		color: #fbe122;
+	}
+	.position {
+		display: flex;
+		align-items: baseline;
+		gap: 0.75rem;
+	}
+	.position-number {
+		font-size: 3em;
+		font-weight: 700;
+		line-height: 1;
+		color: #ffffff;
+	}
+	.points {
+		font-size: 1.2em;
+		color: #fbe122;
+		font-weight: 700;
+	}
+	.record {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.25rem;
+		margin: 1.25rem 0 0;
+	}
+	.record dt {
+		font-size: 0.7em;
+		text-transform: uppercase;
+		opacity: 0.7;
+	}
+	.record dd {
+		margin: 0;
+		font-weight: 700;
+		color: #ffffff;
+	}
+	.form {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-top: 1.25rem;
+	}
+	.form .label {
+		font-size: 0.7em;
+		text-transform: uppercase;
+		opacity: 0.7;
+	}
+	.form ol {
+		display: flex;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.badge {
+		display: inline-grid;
+		place-items: center;
+		width: 1.7rem;
+		height: 1.7rem;
+		border-radius: 6px;
+		font-size: 0.75em;
+		font-weight: 700;
+		color: #ffffff;
+	}
+	.badge.W {
+		background: #1a7f37;
+	}
+	.badge.D {
+		background: #6b7280;
+	}
+	.badge.L {
+		background: #da291c;
+	}
+	.matches {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 0.85em;
+	}
+	.matches li {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.6rem 0;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	}
+	.matches li:last-child {
+		border-bottom: none;
+	}
+	.date {
+		min-width: 5.5rem;
+		color: rgb(var(--gray));
+	}
+	.comp {
+		font-size: 0.75em;
+		font-weight: 700;
+		padding: 0.1rem 0.4rem;
+		border-radius: 4px;
+		background: rgba(218, 41, 28, 10%);
+		color: var(--accent-dark);
+	}
+	.opponent {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1;
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	.opponent img {
+		object-fit: contain;
+	}
+	.score {
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.scorers {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9em;
+	}
+	.scorers th,
+	.scorers td {
+		padding: 0.5rem 0;
+		text-align: left;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	}
+	.scorers thead th {
+		font-size: 0.75em;
+		text-transform: uppercase;
+		color: rgb(var(--gray));
+	}
+	.scorers td {
+		text-align: right;
+		width: 4.5rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.scorers thead th:not(:first-child) {
+		text-align: right;
+	}
+	.note,
+	.updated {
+		font-size: 0.75em;
+		color: rgb(var(--gray));
+		margin: 0.75rem 0 0;
+	}
+	.updated {
+		grid-column: 1 / -1;
+	}
+	/* Phones: date on its own line above each match so team names don't wrap */
+	@media (max-width: 600px) {
+		.panel {
+			padding: 1.25rem;
+		}
+		.matches li {
+			flex-wrap: wrap;
+			row-gap: 0.25rem;
+		}
+		.date {
+			flex-basis: 100%;
+			min-width: 0;
+			font-size: 0.85em;
+		}
+	}
+</style>

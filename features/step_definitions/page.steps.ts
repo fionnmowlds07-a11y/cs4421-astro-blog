@@ -55,6 +55,14 @@ Then('the page should have a {string} card linking to {string}', function (this:
 	assert.ok(match, `no "${card}" card linking to ${href}`);
 });
 
+Then('the page should show the {string} element', function (this: ApiWorld, testId: string) {
+	assert.ok(html(this).includes(`data-testid="${testId}"`), `no element with data-testid="${testId}"`);
+});
+
+Then('the page should not show the {string} element', function (this: ApiWorld, testId: string) {
+	assert.ok(!html(this).includes(`data-testid="${testId}"`), `unexpected element with data-testid="${testId}"`);
+});
+
 Then('I should be permanently redirected to {string}', function (this: ApiWorld, path: string) {
 	assert.equal(this.response?.status, 301);
 	const location = this.response?.headers.get('location') ?? '';

@@ -28,6 +28,11 @@ Then('the response should be JSON', function (this: ApiWorld) {
 	assert.match(this.response?.headers.get('content-type') ?? '', /application\/json/);
 });
 
+Then('the response should not be cacheable', function (this: ApiWorld) {
+	const cacheControl = this.response?.headers.get('cache-control') ?? '';
+	assert.doesNotMatch(cacheControl, /max-age|public/, `unexpected Cache-Control: ${cacheControl}`);
+});
+
 Then('the response field {string} should equal {string}', function (this: ApiWorld, name: string, expected: string) {
 	assert.equal(String(field(this, name)), expected);
 });

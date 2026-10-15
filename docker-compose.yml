@@ -6,4 +6,9 @@ services:
       - "4321:4321"
     environment:
       NODE_ENV: production
+    # Secrets (FOOTBALL_DATA_API_KEY) are injected at runtime from .env, never baked into the image.
+    # Optional so the stack still starts without a key; the Man United page then shows its fallback.
+    env_file:
+      - path: .env
+        required: false
     restart: unless-stopped
