@@ -3,7 +3,7 @@
 import mdx from '@astrojs/mdx';
 import node from '@astrojs/node';
 import sitemap from '@astrojs/sitemap';
-import { defineConfig, fontProviders } from 'astro/config';
+import { defineConfig, envField, fontProviders } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
@@ -17,6 +17,14 @@ export default defineConfig({
         '/about': '/about-me',
         '/blog': '/about-me',
         '/blog/[...slug]': '/about-me/[...slug]',
+    },
+    // Typed environment config (12-factor: config lives in the environment, not the code).
+    // Server-only secrets are read at runtime, so they are never bundled into the build or sent to the browser.
+    env: {
+        schema: {
+            // Optional so the site still runs without it; the Man United page then shows a fallback message.
+            FOOTBALL_DATA_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+        },
     },
     integrations: [mdx(), sitemap()],
     fonts: [
