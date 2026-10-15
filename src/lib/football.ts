@@ -10,21 +10,28 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 // --- Raw API shapes (only the fields this site uses) ---
 
-interface ApiTeam {
+export interface ApiTeam {
 	id: number;
 	name: string;
 	shortName: string;
+	tla?: string;
 	crest: string;
+}
+
+interface ApiScore {
+	home: number | null;
+	away: number | null;
 }
 
 export interface ApiMatch {
 	id: number;
 	utcDate: string;
 	status: string;
+	matchday?: number | null;
 	competition: { code: string; name: string };
 	homeTeam: ApiTeam;
 	awayTeam: ApiTeam;
-	score: { fullTime: { home: number | null; away: number | null } };
+	score: { fullTime: ApiScore; halfTime?: ApiScore };
 }
 
 export interface ApiTableRow {
