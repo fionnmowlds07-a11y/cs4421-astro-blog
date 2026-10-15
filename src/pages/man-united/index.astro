@@ -1,0 +1,23 @@
+---
+// Placeholder shell; becomes server-rendered once live stats are added.
+export const prerender = true;
+import BaseHead from '../../components/BaseHead.astro';
+import Footer from '../../components/Footer.astro';
+import Header from '../../components/Header.astro';
+import { SITE_TITLE } from '../../consts';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={`Man United | ${SITE_TITLE}`} description="Manchester United league position, results and fixtures." />
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>Man United</h1>
+			<p>League position, recent results, upcoming fixtures and top scorers are coming soon.</p>
+		</main>
+		<Footer />
+	</body>
+</html>

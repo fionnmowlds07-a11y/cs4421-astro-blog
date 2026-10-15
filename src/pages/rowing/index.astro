@@ -1,0 +1,23 @@
+---
+// Placeholder shell; becomes server-rendered once sessions are stored in the database.
+export const prerender = true;
+import BaseHead from '../../components/BaseHead.astro';
+import Footer from '../../components/Footer.astro';
+import Header from '../../components/Header.astro';
+import { SITE_TITLE } from '../../consts';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={`Rowing | ${SITE_TITLE}`} description="My rowing training log: sessions, distances and splits." />
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>Rowing</h1>
+			<p>My rowing training log, with sessions, distances and splits, is coming soon.</p>
+		</main>
+		<Footer />
+	</body>
+</html>
