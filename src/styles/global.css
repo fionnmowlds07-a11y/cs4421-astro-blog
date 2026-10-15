@@ -50,6 +50,8 @@ body {
 }
 html {
 	scroll-behavior: smooth;
+	/* Always reserve the scrollbar's space so short and long pages have the same width (no sideways jump). */
+	scrollbar-gutter: stable;
 }
 main {
 	width: 720px;
