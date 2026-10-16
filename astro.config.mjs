@@ -24,6 +24,10 @@ export default defineConfig({
         schema: {
             // Optional so the site still runs without it; the Man United page then shows a fallback message.
             FOOTBALL_DATA_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+            // Supabase for the rowing section (ADR-002). 'secret' so they're read at runtime, never baked into
+            // the build or sent to the browser; optional so the site (and CI) still runs without a database.
+            SUPABASE_URL: envField.string({ context: 'server', access: 'secret', optional: true, url: true }),
+            SUPABASE_PUBLISHABLE_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
         },
     },
     integrations: [mdx(), sitemap()],
