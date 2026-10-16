@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Then, When } from '@cucumber/cucumber';
-import { send } from '../support/http.ts';
+import { send, submitForm } from '../support/http.ts';
 import type { ApiWorld } from '../support/world.ts';
 
 function html(world: ApiWorld): string {
@@ -68,6 +68,20 @@ Then('the section menu should mark {string} as the current page', function (this
 		(m) => m[0].match(/href="([^"]*)"/)?.[1],
 	);
 	assert.deepEqual(current, [href]);
+});
+
+const LOGIN_FIELDS = { email: 'someone@example.test', password: 'not-the-real-password' };
+
+When('I submit the login form on {string}', async function (this: ApiWorld, path: string) {
+	await submitForm(this, path, LOGIN_FIELDS, new URL(this.baseUrl).origin);
+});
+
+When('another website submits a login form to {string}', async function (this: ApiWorld, path: string) {
+	await submitForm(this, path, LOGIN_FIELDS, 'https://evil.example');
+});
+
+Then('the page should ask search engines not to list it', function (this: ApiWorld) {
+	assert.match(html(this), /<meta name="robots" content="noindex/);
 });
 
 Then('I should be permanently redirected to {string}', function (this: ApiWorld, path: string) {
