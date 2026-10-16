@@ -1,0 +1,183 @@
+---
+// The Premier League's top scorers with United players highlighted. ?team=united shows only United players
+// (a plain link, like the other filters in this section).
+export const prerender = false;
+import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
+import { MAN_UNITED_ID } from '../../lib/football';
+import { getPremierLeagueData, type PremierLeagueData } from '../../lib/league';
+
+let data: PremierLeagueData | null = null;
+if (FOOTBALL_DATA_API_KEY) {
+	try {
+		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
+	} catch {
+		// The /api/premier-league/summary endpoint logs upstream failures; the page just shows the fallback.
+	}
+}
+
+if (data) {
+	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+}
+
+const unitedOnly = Astro.url.searchParams.get('team') === 'united';
+const all = data?.scorers ?? [];
+// Players level on goals share a rank, like a sports table ("=4").
+const ranked = all.map((s) => ({ ...s, rank: 1 + all.filter((other) => other.goals > s.goals).length }));
+const rows = unitedOnly ? ranked.filter((s) => s.team.id === MAN_UNITED_ID) : ranked;
+// The free tier returns no assists; only show the column if the API ever provides them.
+const showAssists = all.some((s) => s.assists !== null);
+const isTied = (rank: number) => ranked.filter((s) => s.rank === rank).length > 1;
+const perGame = (goals: number, played: number | null) => (played ? (goals / played).toFixed(2) : '–');
+
+const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+---
+
+<ManUnitedLayout
+	title="Premier League top scorers"
+	heading="Top scorers"
+	description="The Premier League's top scorers with Manchester United players highlighted."
+>
+	{
+		!data ? (
+			<p class="fallback" data-testid="stats-unavailable">
+				Live stats are unavailable right now. Please check back soon.
+			</p>
+		) : (
+			<>
+				<div class="views" role="group" aria-label="Players shown">
+					<a href="/man-united/scorers" aria-current={!unitedOnly ? 'true' : undefined}>
+						All players
+					</a>
+					<a href="/man-united/scorers?team=united" aria-current={unitedOnly ? 'true' : undefined}>
+						Man United
+					</a>
+				</div>
+
+				{rows.length === 0 ? (
+					<p class="note">No Man United players have scored in the league yet.</p>
+				) : (
+					<div class="table-wrap" role="region" aria-label="Premier League top scorers">
+						<table class="data-table" data-testid="scorers-table">
+							<thead>
+								<tr>
+									<th scope="col" class="rank">
+										<abbr title="League rank by goals">#</abbr>
+									</th>
+									<th scope="col" class="player">Player</th>
+									<th scope="col" class="club">Club</th>
+									<th scope="col" class="num">
+										<abbr title="Goals">G</abbr>
+									</th>
+									{showAssists && (
+										<th scope="col" class="num">
+											<abbr title="Assists">A</abbr>
+										</th>
+									)}
+									<th scope="col" class="num">
+										<abbr title="Games played">P</abbr>
+									</th>
+									<th scope="col" class="num">
+										<abbr title="Goals per game">G/G</abbr>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{rows.map((s) => (
+									<tr
+										class:list={{ united: s.team.id === MAN_UNITED_ID }}
+										data-testid={s.team.id === MAN_UNITED_ID ? 'united-row' : undefined}
+									>
+										<td class="rank">
+											{isTied(s.rank) ? '=' : ''}
+											{s.rank}
+										</td>
+										<th scope="row" class="player">
+											{s.name}
+											{s.nationality && <span class="nationality">{s.nationality}</span>}
+										</th>
+										<td class="club">
+											<span class="club-inner">
+												<img src={s.team.crest} alt="" width="20" height="20" loading="lazy" />
+												<span class="name">{s.team.shortName}</span>
+												<abbr class="tla" title={s.team.shortName}>
+													{s.team.tla}
+												</abbr>
+											</span>
+										</td>
+										<td class="num goals">{s.goals}</td>
+										{showAssists && <td class="num">{s.assists ?? 0}</td>}
+										<td class="num">{s.playedMatches ?? '–'}</td>
+										<td class="num">{perGame(s.goals, s.playedMatches)}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+
+				<p class="note">
+					Premier League goals only, top {all.length} scorers.{!showAssists && ' Assists aren’t available on the free data plan.'}
+				</p>
+				<p class="updated">
+					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org
+				</p>
+			</>
+		)
+	}
+</ManUnitedLayout>
+
+<style>
+	/* Segmented control, matching the league table's Overall / Home / Away */
+	.views {
+		display: inline-flex;
+		margin-bottom: 1rem;
+		padding: 0.25rem;
+		border-radius: 999px;
+		background: rgba(var(--gray-light), 70%);
+	}
+	.views a {
+		padding: 0.3rem 1rem;
+		border-radius: 999px;
+		font-size: 0.8em;
+		font-weight: 700;
+		text-decoration: none;
+		color: rgb(var(--gray-dark));
+		transition:
+			background-color var(--speed) var(--ease),
+			color var(--speed) var(--ease);
+	}
+	.views a[aria-current='true'] {
+		background: var(--accent);
+		color: #ffffff;
+	}
+	.rank {
+		width: 2.5rem;
+		text-align: center;
+		color: rgb(var(--gray));
+	}
+	.player {
+		text-align: left;
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	.nationality {
+		display: block;
+		font-size: 0.8em;
+		font-weight: 400;
+		color: rgb(var(--gray));
+	}
+	td.club {
+		font-weight: 400;
+		color: rgb(var(--gray-dark));
+	}
+	.goals {
+		font-weight: 700;
+		color: rgb(var(--black));
+	}
+	@media (max-width: 600px) {
+		.nationality {
+			display: none;
+		}
+	}
+</style>

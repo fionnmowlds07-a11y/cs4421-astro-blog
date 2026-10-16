@@ -81,7 +81,7 @@ export interface LeagueScorer {
 	nationality: string | null;
 	team: TeamInfo;
 	goals: number;
-	/** null on the free tier, which doesn't report assists. */
+	/** null when football-data.org doesn't report assists (it isn't always included on the free plan). */
 	assists: number | null;
 	playedMatches: number | null;
 }

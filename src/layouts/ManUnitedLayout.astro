@@ -20,6 +20,8 @@ const sections = [
 	{ href: '/man-united/table', label: 'Table' },
 	{ href: '/man-united/stats', label: 'Stats' },
 	{ href: '/man-united/compare', label: 'Compare' },
+	{ href: '/man-united/squad', label: 'Squad' },
+	{ href: '/man-united/scorers', label: 'Scorers' },
 ];
 const current = Astro.url.pathname.replace(/\/$/, '');
 ---
@@ -60,9 +62,8 @@ const current = Astro.url.pathname.replace(/\/$/, '');
 		gap: 0.25rem;
 		margin: -0.5rem 0 1.75rem;
 		border-bottom: 1px solid rgba(var(--gray-light), 100%);
-		/* Phones: one row that scrolls sideways */
-		overflow-x: auto;
-		scrollbar-width: none;
+		/* Phones: wraps onto a second line so every page (and the active one) stays visible */
+		flex-wrap: wrap;
 	}
 	.subnav a {
 		position: relative;
