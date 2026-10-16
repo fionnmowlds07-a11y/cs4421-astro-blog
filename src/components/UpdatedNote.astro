@@ -1,0 +1,46 @@
+---
+// The "Updated …" line under the football stats. When the last refresh failed, it says the stats shown
+// are the last saved ones, so visitors know they may be out of date.
+interface Props {
+	updatedAt: string;
+	refreshFailed: boolean;
+	/** Extra text after the data source, e.g. "Premier League games only". */
+	extra?: string;
+}
+
+const { updatedAt, refreshFailed, extra } = Astro.props;
+
+const timeZone = 'Europe/Dublin';
+const updated = new Date(updatedAt);
+const dayOf = (date: Date) => date.toLocaleDateString('en-IE', { timeZone });
+// Saved stats can be up to a day old, so add the date when they're not from today.
+const format = new Intl.DateTimeFormat('en-IE', {
+	hour: '2-digit',
+	minute: '2-digit',
+	...(dayOf(updated) !== dayOf(new Date()) && { day: 'numeric', month: 'short' }),
+	timeZone,
+});
+---
+
+<p class="updated" data-testid="updated">
+	Updated {format.format(updated)} · Data from football-data.org{extra && ` · ${extra}`}
+	{
+		refreshFailed && (
+			<span class="stale" data-testid="stale-note">
+				Couldn’t refresh, showing the last saved stats
+			</span>
+		)
+	}
+</p>
+
+<style>
+	.stale {
+		display: inline-block;
+		margin-left: 0.25rem;
+		padding: 0 0.5rem;
+		border-radius: 999px;
+		background: rgba(218, 41, 28, 10%);
+		color: var(--accent-dark);
+		font-weight: 700;
+	}
+</style>

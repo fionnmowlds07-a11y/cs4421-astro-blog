@@ -10,13 +10,21 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
 	});
 
 /**
+ * Cache-Control for football data. Browsers keep it for a minute; shared caches (e.g. CloudFront) for
+ * 10 minutes, matching the server-side cache, but only a minute after a failed refresh, so recovered
+ * stats reach visitors sooner.
+ */
+export const footballCacheControl = (refreshFailed: boolean) =>
+	`public, max-age=60, s-maxage=${refreshFailed ? 60 : 600}`;
+
+/**
  * Loads data with the API key and turns the outcome into a response:
  * 200 with caching headers, 503 without a key or when rate limited, 502 when the upstream API fails.
  */
 export async function footballDataResponse(
 	apiKey: string | undefined,
 	label: string,
-	load: (apiKey: string) => Promise<unknown>,
+	load: (apiKey: string) => Promise<{ refreshFailed: boolean }>,
 ): Promise<Response> {
 	if (!apiKey) {
 		return json({ error: `${label} are not configured` }, 503);
@@ -24,8 +32,7 @@ export async function footballDataResponse(
 
 	try {
 		const data = await load(apiKey);
-		// Shared caches (e.g. CloudFront) may keep it for 10 minutes, browsers for 1, matching the server-side cache.
-		return json(data, 200, { 'Cache-Control': 'public, max-age=60, s-maxage=600' });
+		return json(data, 200, { 'Cache-Control': footballCacheControl(data.refreshFailed) });
 	} catch (error) {
 		const status = error instanceof FootballDataError ? error.status : undefined;
 		logFootballDataError(error);

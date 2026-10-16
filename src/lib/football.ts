@@ -191,6 +191,9 @@ export interface CacheResult<T> {
 	refreshFailed: boolean;
 }
 
+/** Cached data plus whether it's old because the last refresh failed (shown on the pages and in the APIs). */
+export type WithRefreshStatus<T> = T & { refreshFailed: boolean };
+
 interface CacheEntry<T> {
 	value?: T;
 	loadedAt: number;
@@ -330,6 +333,7 @@ export const FOOTBALL_CACHE_OPTIONS = {
 const summaryCache = createRefreshingCache<ManUnitedSummary>(FOOTBALL_CACHE_OPTIONS);
 
 /** Cached summary: at most 3 API requests per 10 minutes per running server, well inside the free tier. */
-export async function getManUnitedSummary(apiKey: string): Promise<ManUnitedSummary> {
-	return (await summaryCache.get('man-united', () => fetchManUnitedSummary(apiKey))).value;
+export async function getManUnitedSummary(apiKey: string): Promise<WithRefreshStatus<ManUnitedSummary>> {
+	const { value, refreshFailed } = await summaryCache.get('man-united', () => fetchManUnitedSummary(apiKey));
+	return { ...value, refreshFailed };
 }

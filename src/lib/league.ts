@@ -14,6 +14,7 @@ import {
 	getJson,
 	MAN_UNITED_ID,
 	type Outcome,
+	type WithRefreshStatus,
 } from './football';
 
 const FORM_LENGTH = 5;
@@ -492,6 +493,7 @@ const leagueCache = createRefreshingCache<PremierLeagueData>(FOOTBALL_CACHE_OPTI
  * Cached league data: 3 requests per 10 minutes per running server. Together with the
  * Man United summary (also 3) that stays well inside the free tier's 10 requests per minute.
  */
-export async function getPremierLeagueData(apiKey: string): Promise<PremierLeagueData> {
-	return (await leagueCache.get('premier-league', () => fetchPremierLeagueData(apiKey))).value;
+export async function getPremierLeagueData(apiKey: string): Promise<WithRefreshStatus<PremierLeagueData>> {
+	const { value, refreshFailed } = await leagueCache.get('premier-league', () => fetchPremierLeagueData(apiKey));
+	return { ...value, refreshFailed };
 }

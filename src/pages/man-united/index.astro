@@ -2,10 +2,12 @@
 // Server-rendered on each request; the football client caches API data for 10 minutes.
 export const prerender = false;
 import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import UpdatedNote from '../../components/UpdatedNote.astro';
 import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
-import { getManUnitedSummary, type ManUnitedSummary } from '../../lib/football';
+import { footballCacheControl } from '../../lib/football-endpoint';
+import { getManUnitedSummary, type ManUnitedSummary, type WithRefreshStatus } from '../../lib/football';
 
-let summary: ManUnitedSummary | null = null;
+let summary: WithRefreshStatus<ManUnitedSummary> | null = null;
 if (FOOTBALL_DATA_API_KEY) {
 	try {
 		summary = await getManUnitedSummary(FOOTBALL_DATA_API_KEY);
@@ -15,7 +17,7 @@ if (FOOTBALL_DATA_API_KEY) {
 }
 
 if (summary) {
-	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+	Astro.response.headers.set('Cache-Control', footballCacheControl(summary.refreshFailed));
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
@@ -27,7 +29,6 @@ const kickOffFormat = new Intl.DateTimeFormat('en-IE', {
 	minute: '2-digit',
 	timeZone: 'Europe/Dublin',
 });
-const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
 const outcomeLabel = { W: 'Win', D: 'Draw', L: 'Loss' } as const;
 const ordinal = (n: number) => {
 	const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
@@ -138,9 +139,7 @@ const ordinal = (n: number) => {
 					</section>
 				)}
 
-				<p class="updated">
-					Updated {updatedFormat.format(new Date(summary.updatedAt))} · Data from football-data.org
-				</p>
+				<UpdatedNote updatedAt={summary.updatedAt} refreshFailed={summary.refreshFailed} />
 			</div>
 		)
 	}
@@ -277,7 +276,7 @@ const ordinal = (n: number) => {
 	.scorers thead th:not(:first-child) {
 		text-align: right;
 	}
-	.updated {
+	.stats > :global(.updated) {
 		grid-column: 1 / -1;
 	}
 	/* Phones: date on its own line above each match so team names don't wrap */
