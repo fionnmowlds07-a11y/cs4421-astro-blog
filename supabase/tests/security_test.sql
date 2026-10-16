@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 -- Start from empty tables so the sample data from seed.sql can't affect the results (undone by the rollback).
 truncate public.erg_sessions, public.on_water_outings;
-select plan(14);
+select plan(17);
 
 -- Two test logins (rolled back at the end): one admin, one stranger.
 insert into auth.users (id, email) values
@@ -24,6 +24,11 @@ select throws_ok(
 );
 select throws_ok($$ select * from public.admins $$, '42501', null, 'logged-out visitors cannot see the admins list');
 select is(private.is_admin(), false, 'a logged-out visitor is not an admin');
+select throws_ok(
+  $$ select public.current_user_is_admin() $$,
+  '42501', null,
+  'logged-out visitors cannot ask whether they are an admin'
+);
 
 -- A stranger with an account --------------------------------------------------
 reset role;
@@ -40,10 +45,12 @@ select is((select count(*) from changed), 0::bigint, 'a stranger cannot edit ses
 with removed as (delete from public.on_water_outings returning 1)
 select is((select count(*) from removed), 0::bigint, 'a stranger cannot delete outings');
 select is(private.is_admin(), false, 'a stranger is not an admin');
+select is(public.current_user_is_admin(), false, 'the website is told a stranger is not an admin');
 
 -- The admin -----------------------------------------------------------------
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
 select is(private.is_admin(), true, 'the admin is recognised');
+select is(public.current_user_is_admin(), true, 'the website is told the admin is an admin');
 select lives_ok(
   $$ insert into public.erg_sessions (distance_m, duration_ds) values (5000, 10500) $$,
   'the admin can add sessions'
