@@ -1,0 +1,91 @@
+---
+// Shared shell for every page in the Man United tab: United theme, header, title and the section sub-menu.
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { SITE_TITLE } from '../consts';
+import '../styles/football.css';
+
+interface Props {
+	title: string;
+	description: string;
+	heading?: string;
+}
+
+const { title, description, heading = 'Man United' } = Astro.props;
+
+// The section's pages, in menu order.
+const sections = [
+	{ href: '/man-united', label: 'Overview' },
+	{ href: '/man-united/table', label: 'Table' },
+	{ href: '/man-united/stats', label: 'Stats' },
+	{ href: '/man-united/compare', label: 'Compare' },
+	{ href: '/man-united/squad', label: 'Squad' },
+	{ href: '/man-united/scorers', label: 'Scorers' },
+];
+const current = Astro.url.pathname.replace(/\/$/, '');
+---
+
+<!doctype html>
+<html lang="en" data-theme="united">
+	<head>
+		<BaseHead title={`${title} | ${SITE_TITLE}`} description={description} />
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>{heading}</h1>
+			<span class="stripe" aria-hidden="true"></span>
+			<nav class="subnav" aria-label="Man United sections">
+				{
+					sections.map((s) => (
+						<a href={s.href} aria-current={s.href === current ? 'page' : undefined}>
+							{s.label}
+							{/* Like the main tabs, the shared transition name slides the underline to the new page. */}
+							{s.href === current && <span class="indicator" transition:name="subnav-indicator" aria-hidden="true" />}
+						</a>
+					))
+				}
+			</nav>
+			<slot />
+		</main>
+		<Footer />
+	</body>
+</html>
+
+<style>
+	main {
+		width: 960px;
+	}
+	.subnav {
+		display: flex;
+		gap: 0.25rem;
+		margin: -0.5rem 0 1.75rem;
+		border-bottom: 1px solid rgba(var(--gray-light), 100%);
+		/* Phones: wraps onto a second line so every page (and the active one) stays visible */
+		flex-wrap: wrap;
+	}
+	.subnav a {
+		position: relative;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.85em;
+		font-weight: 700;
+		white-space: nowrap;
+		text-decoration: none;
+		color: rgb(var(--gray));
+		transition: color var(--speed) var(--ease);
+	}
+	.subnav a:hover,
+	.subnav a[aria-current='page'] {
+		color: var(--accent);
+	}
+	.indicator {
+		position: absolute;
+		left: 0.75rem;
+		right: 0.75rem;
+		bottom: 0;
+		height: 3px;
+		border-radius: 3px;
+		background: var(--accent);
+	}
+</style>

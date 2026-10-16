@@ -2,10 +2,7 @@
 // Server-rendered on each request; the football client caches API data for 10 minutes.
 export const prerender = false;
 import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
-import BaseHead from '../../components/BaseHead.astro';
-import Footer from '../../components/Footer.astro';
-import Header from '../../components/Header.astro';
-import { SITE_TITLE } from '../../consts';
+import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
 import { getManUnitedSummary, type ManUnitedSummary } from '../../lib/football';
 
 let summary: ManUnitedSummary | null = null;
@@ -38,157 +35,123 @@ const ordinal = (n: number) => {
 };
 ---
 
-<!doctype html>
-<html lang="en" data-theme="united">
-	<head>
-		<BaseHead title={`Man United | ${SITE_TITLE}`} description="Manchester United league position, results and fixtures." />
-	</head>
-	<body>
-		<Header />
-		<main>
-			<h1>Man United</h1>
-			<span class="stripe" aria-hidden="true"></span>
-
-			{
-				!summary ? (
-					<p class="fallback" data-testid="stats-unavailable">
-						Live stats are unavailable right now. Please check back soon.
-					</p>
-				) : (
-					<div class="stats" data-testid="stats">
-						{summary.league && (
-							<section class="panel league" aria-labelledby="league-heading">
-								<h2 id="league-heading">Premier League</h2>
-								<div class="position">
-									<span class="position-number">{ordinal(summary.league.position)}</span>
-									<span class="points">{summary.league.points} pts</span>
-								</div>
-								<dl class="record">
-									<div><dt>Played</dt><dd>{summary.league.played}</dd></div>
-									<div><dt>Won</dt><dd>{summary.league.won}</dd></div>
-									<div><dt>Drawn</dt><dd>{summary.league.drawn}</dd></div>
-									<div><dt>Lost</dt><dd>{summary.league.lost}</dd></div>
-									<div>
-										<dt>Goal diff.</dt>
-										<dd>{summary.league.goalDifference > 0 ? `+${summary.league.goalDifference}` : summary.league.goalDifference}</dd>
-									</div>
-								</dl>
-								{summary.form.length > 0 && (
-									<div class="form">
-										<span class="label">Form</span>
-										<ol aria-label="Form, oldest to newest">
-											{summary.form.map((outcome) => (
-												<li class={`badge ${outcome}`} title={outcomeLabel[outcome]}>
-													{outcome}
-												</li>
-											))}
-										</ol>
-									</div>
-								)}
-							</section>
+<ManUnitedLayout title="Man United" description="Manchester United league position, results and fixtures.">
+	{
+		!summary ? (
+			<p class="fallback" data-testid="stats-unavailable">
+				Live stats are unavailable right now. Please check back soon.
+			</p>
+		) : (
+			<div class="stats" data-testid="stats">
+				{summary.league && (
+					<section class="panel league" aria-labelledby="league-heading">
+						<h2 id="league-heading">Premier League</h2>
+						<div class="position">
+							<span class="position-number">{ordinal(summary.league.position)}</span>
+							<span class="points">{summary.league.points} pts</span>
+						</div>
+						<dl class="record">
+							<div><dt>Played</dt><dd>{summary.league.played}</dd></div>
+							<div><dt>Won</dt><dd>{summary.league.won}</dd></div>
+							<div><dt>Drawn</dt><dd>{summary.league.drawn}</dd></div>
+							<div><dt>Lost</dt><dd>{summary.league.lost}</dd></div>
+							<div>
+								<dt>Goal diff.</dt>
+								<dd>{summary.league.goalDifference > 0 ? `+${summary.league.goalDifference}` : summary.league.goalDifference}</dd>
+							</div>
+						</dl>
+						{summary.form.length > 0 && (
+							<div class="form">
+								<span class="label">Form</span>
+								<ol aria-label="Form, oldest to newest">
+									{summary.form.map((outcome) => (
+										<li class={`badge ${outcome}`} title={outcomeLabel[outcome]}>
+											{outcome}
+										</li>
+									))}
+								</ol>
+							</div>
 						)}
+					</section>
+				)}
 
-						<section class="panel" aria-labelledby="results-heading">
-							<h2 id="results-heading">Recent results</h2>
-							<ul class="matches">
-								{summary.recentResults.map((r) => (
-									<li>
-										<span class="date">{dateFormat.format(new Date(r.date))}</span>
-										<span class="comp">{r.competition}</span>
-										<span class="opponent">
-											<img src={r.opponentCrest} alt="" width="22" height="22" loading="lazy" />
-											{r.venue === 'H' ? 'vs' : 'at'} {r.opponent}
-										</span>
-										<span class="score">
-											{r.goalsFor}–{r.goalsAgainst}
-										</span>
-										<span class={`badge ${r.outcome}`} title={outcomeLabel[r.outcome]}>
-											{r.outcome}
-										</span>
-									</li>
+				<section class="panel" aria-labelledby="results-heading">
+					<h2 id="results-heading">Recent results</h2>
+					<ul class="matches">
+						{summary.recentResults.map((r) => (
+							<li>
+								<span class="date">{dateFormat.format(new Date(r.date))}</span>
+								<span class="comp">{r.competition}</span>
+								<span class="opponent">
+									<img src={r.opponentCrest} alt="" width="22" height="22" loading="lazy" />
+									{r.venue === 'H' ? 'vs' : 'at'} {r.opponent}
+								</span>
+								<span class="score">
+									{r.goalsFor}–{r.goalsAgainst}
+								</span>
+								<span class={`badge ${r.outcome}`} title={outcomeLabel[r.outcome]}>
+									{r.outcome}
+								</span>
+							</li>
+						))}
+					</ul>
+				</section>
+
+				<section class="panel" aria-labelledby="fixtures-heading">
+					<h2 id="fixtures-heading">Upcoming fixtures</h2>
+					<ul class="matches">
+						{summary.upcomingFixtures.map((f) => (
+							<li>
+								<span class="date">{kickOffFormat.format(new Date(f.date))}</span>
+								<span class="comp">{f.competition}</span>
+								<span class="opponent">
+									<img src={f.opponentCrest} alt="" width="22" height="22" loading="lazy" />
+									{f.venue === 'H' ? 'vs' : 'at'} {f.opponent}
+								</span>
+							</li>
+						))}
+					</ul>
+				</section>
+
+				{summary.topScorers.length > 0 && (
+					<section class="panel" aria-labelledby="scorers-heading">
+						<h2 id="scorers-heading">Top scorers</h2>
+						<table class="scorers">
+							<thead>
+								<tr>
+									<th scope="col">Player</th>
+									<th scope="col">Goals</th>
+									<th scope="col">Assists</th>
+								</tr>
+							</thead>
+							<tbody>
+								{summary.topScorers.map((s) => (
+									<tr>
+										<th scope="row">{s.name}</th>
+										<td>{s.goals}</td>
+										<td>{s.assists}</td>
+									</tr>
 								))}
-							</ul>
-						</section>
+							</tbody>
+						</table>
+						<p class="note">Premier League goals and assists.</p>
+					</section>
+				)}
 
-						<section class="panel" aria-labelledby="fixtures-heading">
-							<h2 id="fixtures-heading">Upcoming fixtures</h2>
-							<ul class="matches">
-								{summary.upcomingFixtures.map((f) => (
-									<li>
-										<span class="date">{kickOffFormat.format(new Date(f.date))}</span>
-										<span class="comp">{f.competition}</span>
-										<span class="opponent">
-											<img src={f.opponentCrest} alt="" width="22" height="22" loading="lazy" />
-											{f.venue === 'H' ? 'vs' : 'at'} {f.opponent}
-										</span>
-									</li>
-								))}
-							</ul>
-						</section>
-
-						{summary.topScorers.length > 0 && (
-							<section class="panel" aria-labelledby="scorers-heading">
-								<h2 id="scorers-heading">Top scorers</h2>
-								<table class="scorers">
-									<thead>
-										<tr>
-											<th scope="col">Player</th>
-											<th scope="col">Goals</th>
-											<th scope="col">Assists</th>
-										</tr>
-									</thead>
-									<tbody>
-										{summary.topScorers.map((s) => (
-											<tr>
-												<th scope="row">{s.name}</th>
-												<td>{s.goals}</td>
-												<td>{s.assists}</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-								<p class="note">Premier League goals and assists.</p>
-							</section>
-						)}
-
-						<p class="updated">
-							Updated {updatedFormat.format(new Date(summary.updatedAt))} · Data from football-data.org
-						</p>
-					</div>
-				)
-			}
-		</main>
-		<Footer />
-	</body>
-</html>
+				<p class="updated">
+					Updated {updatedFormat.format(new Date(summary.updatedAt))} · Data from football-data.org
+				</p>
+			</div>
+		)
+	}
+</ManUnitedLayout>
 
 <style>
-	main {
-		width: 860px;
-	}
-	.fallback {
-		padding: 1.25rem 1.5rem;
-		border-left: 4px solid var(--accent);
-		background: var(--surface);
-		border-radius: 8px;
-	}
 	.stats {
 		display: grid;
 		/* min() lets a column shrink to the screen width on phones instead of overflowing */
 		grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
 		gap: 1.25rem;
-	}
-	.panel {
-		padding: 1.5rem;
-		border-radius: 14px;
-		background: var(--surface);
-		box-shadow: 0 1px 3px rgba(var(--black), 8%);
-	}
-	.panel h2 {
-		font-size: 1.1em;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		margin-bottom: 1rem;
 	}
 	.league {
 		background: #0a0a0a;
@@ -246,25 +209,6 @@ const ordinal = (n: number) => {
 		margin: 0;
 		padding: 0;
 		list-style: none;
-	}
-	.badge {
-		display: inline-grid;
-		place-items: center;
-		width: 1.7rem;
-		height: 1.7rem;
-		border-radius: 6px;
-		font-size: 0.75em;
-		font-weight: 700;
-		color: #ffffff;
-	}
-	.badge.W {
-		background: #1a7f37;
-	}
-	.badge.D {
-		background: #6b7280;
-	}
-	.badge.L {
-		background: #da291c;
 	}
 	.matches {
 		margin: 0;
@@ -333,20 +277,11 @@ const ordinal = (n: number) => {
 	.scorers thead th:not(:first-child) {
 		text-align: right;
 	}
-	.note,
-	.updated {
-		font-size: 0.75em;
-		color: rgb(var(--gray));
-		margin: 0.75rem 0 0;
-	}
 	.updated {
 		grid-column: 1 / -1;
 	}
 	/* Phones: date on its own line above each match so team names don't wrap */
 	@media (max-width: 600px) {
-		.panel {
-			padding: 1.25rem;
-		}
 		.matches li {
 			flex-wrap: wrap;
 			row-gap: 0.25rem;

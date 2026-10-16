@@ -1,0 +1,260 @@
+---
+// League-wide team stats: Man United's rank in each one, then every team's numbers in a sortable table.
+// Sorting is a plain link (?sort=…&order=worst), like the Table page, so it works without JavaScript.
+export const prerender = false;
+import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
+import { MAN_UNITED_ID } from '../../lib/football';
+import { getPremierLeagueData, type PremierLeagueData, rankFor, STAT_METRICS } from '../../lib/league';
+
+let data: PremierLeagueData | null = null;
+if (FOOTBALL_DATA_API_KEY) {
+	try {
+		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
+	} catch {
+		// The /api/premier-league/summary endpoint logs upstream failures; the page just shows the fallback.
+	}
+}
+
+if (data) {
+	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+}
+
+const ordinal = (n: number) => {
+	const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+	return `${n}${suffix}`;
+};
+
+// United's rank for every stat, for the cards at the top.
+const ranks = data
+	? STAT_METRICS.map((metric) => ({ metric, rank: rankFor(data.stats, metric, MAN_UNITED_ID) })).filter((r) => r.rank)
+	: [];
+
+// The table defaults to points per game, best first. Clicking a column sorts best first; again, worst first.
+const params = Astro.url.searchParams;
+const sortMetric = STAT_METRICS.find((m) => m.key === params.get('sort')) ?? STAT_METRICS[0];
+const order = params.get('order') === 'worst' ? 'worst' : 'best';
+const sortHref = (key: string) => {
+	const flip = key === sortMetric.key && order === 'best';
+	return `/man-united/stats?sort=${key}${flip ? '&order=worst' : ''}`;
+};
+
+const leaguePosition = new Map(data?.tables.all.map((row) => [row.team.id, row.position]) ?? []);
+const bestFirst = (a: number, b: number) => (sortMetric.better === 'high' ? b - a : a - b);
+const rows = [...(data?.stats ?? [])].sort(
+	(a, b) =>
+		bestFirst(sortMetric.value(a), sortMetric.value(b)) * (order === 'worst' ? -1 : 1) ||
+		(leaguePosition.get(a.team.id) ?? 0) - (leaguePosition.get(b.team.id) ?? 0),
+);
+
+const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+---
+
+<ManUnitedLayout
+	title="Premier League stats"
+	heading="Premier League stats"
+	description="Premier League team stats with Manchester United's rank in each one."
+>
+	{
+		!data ? (
+			<p class="fallback" data-testid="stats-unavailable">
+				Live stats are unavailable right now. Please check back soon.
+			</p>
+		) : (
+			<>
+				<section aria-labelledby="ranks-heading">
+					<h2 id="ranks-heading" class="section-heading">
+						Where United rank
+					</h2>
+					<ul class="rank-cards" data-testid="united-ranks">
+						{ranks.map(({ metric, rank }) => {
+							if (!rank) return null;
+							// Position of United's value between the league's worst (left) and best (right).
+							const spread = rank.best - rank.worst;
+							const percent = spread === 0 ? 100 : Math.round(((rank.value - rank.worst) / spread) * 100);
+							return (
+								<li class="panel rank-card">
+									<h3 title={metric.hint}>{metric.label}</h3>
+									<p class="rank">
+										<span class="rank-number">
+											{rank.tied ? '=' : ''}
+											{ordinal(rank.rank)}
+										</span>
+										<span class="of">of {rank.of}</span>
+									</p>
+									<p class="value">{metric.format(rank.value)}</p>
+									<div
+										class="meter"
+										role="img"
+										aria-label={`${metric.format(rank.value)}, between the league's worst ${metric.format(rank.worst)} and best ${metric.format(rank.best)}`}
+									>
+										<span class="meter-fill" style={`width: ${percent}%`} />
+									</div>
+									<p class="range">
+										<span>Worst {metric.format(rank.worst)}</span>
+										<span class="avg">Avg {metric.format(rank.average)}</span>
+										<span>Best {metric.format(rank.best)}</span>
+									</p>
+								</li>
+							);
+						})}
+					</ul>
+				</section>
+
+				<section aria-labelledby="all-heading">
+					<h2 id="all-heading" class="section-heading">
+						Every team
+					</h2>
+					<div class="table-wrap" role="region" aria-label="Premier League team stats">
+						<table class="data-table" data-testid="stats-table">
+							<thead>
+								<tr>
+									<th scope="col" class="club">Club</th>
+									<th scope="col" class="num">
+										<abbr title="Played">P</abbr>
+									</th>
+									{STAT_METRICS.map((m) => {
+										const sorted = m.key === sortMetric.key;
+										const ascending = (m.better === 'low') === (order === 'best');
+										return (
+											<th
+												scope="col"
+												class:list={['num', { sorted }]}
+												aria-sort={sorted ? (ascending ? 'ascending' : 'descending') : undefined}
+											>
+												<a href={sortHref(m.key)} title={`Sort by ${m.label.toLowerCase()}`}>
+													<abbr title={m.hint ? `${m.label}: ${m.hint}` : m.label}>{m.short}</abbr>
+													{sorted && <span aria-hidden="true">{order === 'best' ? '▼' : '▲'}</span>}
+												</a>
+											</th>
+										);
+									})}
+								</tr>
+							</thead>
+							<tbody>
+								{rows.map((s) => (
+									<tr
+										class:list={{ united: s.team.id === MAN_UNITED_ID }}
+										data-testid={s.team.id === MAN_UNITED_ID ? 'united-row' : undefined}
+									>
+										<th scope="row" class="club">
+											<span class="club-inner">
+												<img src={s.team.crest} alt="" width="20" height="20" loading="lazy" />
+												<span class="name">{s.team.shortName}</span>
+												<abbr class="tla" title={s.team.shortName}>
+													{s.team.tla}
+												</abbr>
+											</span>
+										</th>
+										<td class="num">{s.played}</td>
+										{STAT_METRICS.map((m) => (
+											<td class:list={['num', { sorted: m.key === sortMetric.key }]}>{m.format(m.value(s))}</td>
+										))}
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+					<p class="note">
+						▼ shows the best first. Comebacks are games behind at half-time that weren't lost. Premier League games
+						only.
+					</p>
+				</section>
+
+				<p class="updated">
+					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org
+				</p>
+			</>
+		)
+	}
+</ManUnitedLayout>
+
+<style>
+	.section-heading {
+		font-size: 1.1em;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin: 0 0 1rem;
+	}
+	section + section {
+		margin-top: 2.25rem;
+	}
+	.rank-cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+		gap: 1rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.rank-card {
+		padding: 1.1rem 1.25rem;
+	}
+	@media (max-width: 600px) {
+		/* Two cards per row, so nine cards don't make a long scroll */
+		.rank-cards {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.6rem;
+		}
+		.rank-card {
+			padding: 0.9rem;
+		}
+		.rank-number {
+			font-size: 1.5em;
+		}
+		/* Worst / best only: the average doesn't fit on half-width cards */
+		.range .avg {
+			display: none;
+		}
+	}
+	.rank-card h3 {
+		margin: 0;
+		font-size: 0.7em;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: rgb(var(--gray));
+	}
+	.rank {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		margin: 0.35rem 0 0;
+	}
+	.rank-number {
+		font-size: 1.9em;
+		font-weight: 700;
+		line-height: 1;
+		color: rgb(var(--black));
+	}
+	.of {
+		font-size: 0.75em;
+		color: rgb(var(--gray));
+	}
+	.value {
+		margin: 0.25rem 0 0.6rem;
+		font-weight: 700;
+		color: var(--accent);
+		font-variant-numeric: tabular-nums;
+	}
+	.meter {
+		height: 6px;
+		border-radius: 3px;
+		background: rgba(var(--gray-light), 100%);
+		overflow: hidden;
+	}
+	.meter-fill {
+		display: block;
+		height: 100%;
+		border-radius: 3px;
+		background: var(--accent);
+	}
+	.range {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin: 0.4rem 0 0;
+		font-size: 0.6em;
+		color: rgb(var(--gray));
+		font-variant-numeric: tabular-nums;
+	}
+</style>

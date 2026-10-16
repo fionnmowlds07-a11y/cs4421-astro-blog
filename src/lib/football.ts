@@ -10,21 +10,28 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 // --- Raw API shapes (only the fields this site uses) ---
 
-interface ApiTeam {
+export interface ApiTeam {
 	id: number;
 	name: string;
 	shortName: string;
+	tla?: string;
 	crest: string;
+}
+
+interface ApiScore {
+	home: number | null;
+	away: number | null;
 }
 
 export interface ApiMatch {
 	id: number;
 	utcDate: string;
 	status: string;
+	matchday?: number | null;
 	competition: { code: string; name: string };
 	homeTeam: ApiTeam;
 	awayTeam: ApiTeam;
-	score: { fullTime: { home: number | null; away: number | null } };
+	score: { fullTime: ApiScore; halfTime?: ApiScore };
 }
 
 export interface ApiTableRow {
@@ -45,10 +52,11 @@ export interface ApiStandings {
 }
 
 export interface ApiScorer {
-	player: { id: number; name: string };
+	player: { id: number; name: string; nationality?: string | null };
 	team: { id: number };
 	goals: number;
 	assists: number | null;
+	playedMatches?: number;
 }
 
 // --- Summary shapes used by the site ---
@@ -198,9 +206,9 @@ export class FootballDataError extends Error {
 	}
 }
 
-type FetchFn = typeof fetch;
+export type FetchFn = typeof fetch;
 
-async function getJson<T>(path: string, apiKey: string, fetchFn: FetchFn): Promise<T> {
+export async function getJson<T>(path: string, apiKey: string, fetchFn: FetchFn): Promise<T> {
 	const response = await fetchFn(`${BASE_URL}${path}`, {
 		headers: { 'X-Auth-Token': apiKey },
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
