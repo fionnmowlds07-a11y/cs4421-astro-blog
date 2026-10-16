@@ -1,6 +1,8 @@
 -- Erg sessions and outings: generated splits, sanity checks and timestamps.
 begin;
 create extension if not exists pgtap with schema extensions;
+-- Start from empty tables so the sample data from seed.sql can't affect the results (undone by the rollback).
+truncate public.erg_sessions, public.on_water_outings;
 select plan(11);
 
 insert into public.erg_sessions (distance_m, duration_ds) values (2000, 4000);

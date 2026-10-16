@@ -1,6 +1,8 @@
 -- personal_bests: fastest single test per standard distance and machine.
 begin;
 create extension if not exists pgtap with schema extensions;
+-- Start from empty tables so the sample data from seed.sql can't affect the results (undone by the rollback).
+truncate public.erg_sessions, public.on_water_outings;
 select plan(4);
 
 insert into public.erg_sessions (session_date, session_type, distance_m, duration_ds, machine, is_test, notes) values
