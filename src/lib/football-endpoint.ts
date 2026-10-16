@@ -1,7 +1,7 @@
 // Shared response handling for the football-data.org backed API endpoints:
 // caching headers on success, and graceful JSON errors (with a structured log line) on failure.
 
-import { FootballDataError } from './football';
+import { FootballDataError, logFootballDataError } from './football';
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
 	new Response(JSON.stringify(body), {
@@ -28,15 +28,7 @@ export async function footballDataResponse(
 		return json(data, 200, { 'Cache-Control': 'public, max-age=60, s-maxage=600' });
 	} catch (error) {
 		const status = error instanceof FootballDataError ? error.status : undefined;
-		console.error(
-			JSON.stringify({
-				timestamp: new Date().toISOString(),
-				level: 'ERROR',
-				event: 'football_data_failed',
-				upstreamStatus: status ?? null,
-				message: error instanceof Error ? error.message : String(error),
-			}),
-		);
+		logFootballDataError(error);
 		if (status === 429) {
 			return json({ error: `${label} are temporarily unavailable, please try again shortly` }, 503, {
 				'Retry-After': '60',

@@ -3,7 +3,7 @@ import {
 	type ApiMatch,
 	type ApiScorer,
 	type ApiStandings,
-	createTtlCache,
+	createRefreshingCache,
 	FootballDataError,
 	fetchManUnitedSummary,
 	leagueSummary,
@@ -141,35 +141,128 @@ describe('teamScorers', () => {
 	});
 });
 
-describe('createTtlCache', () => {
-	it('serves the cached value until the TTL expires, then reloads', async () => {
+describe('createRefreshingCache', () => {
+	// A fake clock: fresh for 10 ms, shown while stale up to 100 ms, failed refreshes retried after 5 ms.
+	function setup() {
 		let clock = 0;
-		const cache = createTtlCache<number>(1000, () => clock);
-		const load = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(2);
+		const onRefreshError = vi.fn();
+		const cache = createRefreshingCache<string>({
+			freshMs: 10,
+			maxStaleMs: 100,
+			retryMs: 5,
+			onRefreshError,
+			now: () => clock,
+		});
+		return { cache, onRefreshError, tick: (ms: number) => (clock += ms) };
+	}
+	// Lets a background refresh (a promise nobody awaits) finish.
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(await cache.get('k', load)).toBe(1);
-		clock = 999;
-		expect(await cache.get('k', load)).toBe(1);
-		clock = 1000;
-		expect(await cache.get('k', load)).toBe(2);
-		expect(load).toHaveBeenCalledTimes(2);
-	});
+	it('serves a fresh value without loading again', async () => {
+		const { cache, tick } = setup();
+		const load = vi.fn().mockResolvedValue('v1');
 
-	it('shares one in-flight load between simultaneous callers', async () => {
-		const cache = createTtlCache<string>(1000);
-		const load = vi.fn().mockResolvedValue('data');
-
-		const results = await Promise.all([cache.get('k', load), cache.get('k', load), cache.get('k', load)]);
-		expect(results).toEqual(['data', 'data', 'data']);
+		expect(await cache.get('k', load)).toEqual({ value: 'v1', refreshFailed: false });
+		tick(9);
+		expect(await cache.get('k', load)).toEqual({ value: 'v1', refreshFailed: false });
 		expect(load).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not cache failures, so the next call retries', async () => {
-		const cache = createTtlCache<string>(1000);
+	it('serves a stale value instantly and refreshes it in the background', async () => {
+		const { cache, tick } = setup();
+		const load = vi.fn().mockResolvedValueOnce('v1').mockResolvedValueOnce('v2');
+
+		await cache.get('k', load);
+		tick(10);
+		// The stale value comes back straight away, without waiting for the refresh.
+		expect(await cache.get('k', load)).toEqual({ value: 'v1', refreshFailed: false });
+		await settle();
+		expect(await cache.get('k', load)).toEqual({ value: 'v2', refreshFailed: false });
+		expect(load).toHaveBeenCalledTimes(2);
+	});
+
+	it('keeps the old value and flags it when a background refresh fails, then recovers', async () => {
+		const { cache, onRefreshError, tick } = setup();
+		const load = vi
+			.fn()
+			.mockResolvedValueOnce('v1')
+			.mockRejectedValueOnce(new Error('timeout'))
+			.mockResolvedValueOnce('v2');
+
+		await cache.get('k', load);
+		tick(10);
+		await cache.get('k', load);
+		await settle();
+
+		expect(await cache.get('k', load)).toEqual({ value: 'v1', refreshFailed: true });
+		expect(onRefreshError).toHaveBeenCalledWith(new Error('timeout'));
+
+		tick(5);
+		await cache.get('k', load);
+		await settle();
+		expect(await cache.get('k', load)).toEqual({ value: 'v2', refreshFailed: false });
+	});
+
+	it('waits before retrying a failed refresh, so a broken API is not hammered', async () => {
+		const { cache, tick } = setup();
+		const load = vi.fn().mockResolvedValueOnce('v1').mockRejectedValue(new Error('down'));
+
+		await cache.get('k', load);
+		tick(10);
+		await cache.get('k', load);
+		await settle();
+		for (let i = 0; i < 5; i++) await cache.get('k', load);
+		expect(load).toHaveBeenCalledTimes(2);
+
+		tick(5);
+		await cache.get('k', load);
+		await settle();
+		expect(load).toHaveBeenCalledTimes(3);
+	});
+
+	it('runs only one refresh at a time, however many callers arrive', async () => {
+		const { cache, tick } = setup();
+		let finish: (value: string) => void = () => {};
+		const load = vi
+			.fn()
+			.mockResolvedValueOnce('v1')
+			.mockImplementationOnce(() => new Promise<string>((resolve) => (finish = resolve)));
+
+		await cache.get('k', load);
+		tick(10);
+		const results = await Promise.all([cache.get('k', load), cache.get('k', load), cache.get('k', load)]);
+		expect(results.map((r) => r.value)).toEqual(['v1', 'v1', 'v1']);
+		expect(load).toHaveBeenCalledTimes(2);
+
+		finish('v2');
+		await settle();
+		expect((await cache.get('k', load)).value).toBe('v2');
+	});
+
+	it('stops showing a value once it is too old, and waits for a fresh one instead', async () => {
+		const { cache, tick } = setup();
+		const load = vi.fn().mockResolvedValueOnce('v1').mockRejectedValueOnce(new Error('down'));
+
+		await cache.get('k', load);
+		tick(100);
+		await expect(cache.get('k', load)).rejects.toThrow('down');
+	});
+
+	it('shares one first load between simultaneous callers', async () => {
+		const { cache } = setup();
+		const load = vi.fn().mockResolvedValue('data');
+
+		const results = await Promise.all([cache.get('k', load), cache.get('k', load), cache.get('k', load)]);
+		expect(results.map((r) => r.value)).toEqual(['data', 'data', 'data']);
+		expect(load).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not cache a failed first load, so the next call retries', async () => {
+		const { cache } = setup();
 		const load = vi.fn().mockRejectedValueOnce(new Error('down')).mockResolvedValueOnce('recovered');
 
 		await expect(cache.get('k', load)).rejects.toThrow('down');
-		expect(await cache.get('k', load)).toBe('recovered');
+		expect((await cache.get('k', load)).value).toBe('recovered');
 	});
 });
 

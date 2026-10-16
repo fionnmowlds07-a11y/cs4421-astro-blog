@@ -8,7 +8,8 @@ import {
 	type ApiMatch,
 	type ApiScorer,
 	type ApiTeam,
-	createTtlCache,
+	createRefreshingCache,
+	FOOTBALL_CACHE_OPTIONS,
 	type FetchFn,
 	getJson,
 	MAN_UNITED_ID,
@@ -485,13 +486,12 @@ export async function fetchPremierLeagueData(apiKey: string, fetchFn: FetchFn = 
 	};
 }
 
-export const LEAGUE_TTL_MS = 10 * 60 * 1000;
-const leagueCache = createTtlCache<PremierLeagueData>(LEAGUE_TTL_MS);
+const leagueCache = createRefreshingCache<PremierLeagueData>(FOOTBALL_CACHE_OPTIONS);
 
 /**
  * Cached league data: 3 requests per 10 minutes per running server. Together with the
  * Man United summary (also 3) that stays well inside the free tier's 10 requests per minute.
  */
-export function getPremierLeagueData(apiKey: string): Promise<PremierLeagueData> {
-	return leagueCache.get('premier-league', () => fetchPremierLeagueData(apiKey));
+export async function getPremierLeagueData(apiKey: string): Promise<PremierLeagueData> {
+	return (await leagueCache.get('premier-league', () => fetchPremierLeagueData(apiKey))).value;
 }
