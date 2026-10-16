@@ -3,10 +3,13 @@
 // The free football-data.org plan has no appearances or minutes, so goals are the only per-player stat.
 export const prerender = false;
 import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import UpdatedNote from '../../components/UpdatedNote.astro';
 import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
+import { type WithRefreshStatus } from '../../lib/football';
+import { footballCacheControl } from '../../lib/football-endpoint';
 import { getPremierLeagueData, type PositionGroup, type PremierLeagueData } from '../../lib/league';
 
-let data: PremierLeagueData | null = null;
+let data: WithRefreshStatus<PremierLeagueData> | null = null;
 if (FOOTBALL_DATA_API_KEY) {
 	try {
 		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
@@ -16,7 +19,7 @@ if (FOOTBALL_DATA_API_KEY) {
 }
 
 if (data) {
-	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+	Astro.response.headers.set('Cache-Control', footballCacheControl(data.refreshFailed));
 }
 
 const squad = data?.squad ?? [];
@@ -37,7 +40,6 @@ const averageAge = ages.length ? (ages.reduce((sum, age) => sum + age, 0) / ages
 const nationalities = new Set(squad.map((p) => p.nationality).filter(Boolean)).size;
 const scorers = squad.filter((p) => p.goals > 0).length;
 
-const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
 ---
 
 <ManUnitedLayout title="Man United squad" heading="Squad" description="The Manchester United squad by position, with ages, nationalities and Premier League goals.">
@@ -96,9 +98,7 @@ const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute
 					Squad list from football-data.org. Appearances and minutes aren't available on the free plan, so goals are the
 					only per-player stat.
 				</p>
-				<p class="updated">
-					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org
-				</p>
+				<UpdatedNote updatedAt={data.updatedAt} refreshFailed={data.refreshFailed} />
 			</>
 		)
 	}

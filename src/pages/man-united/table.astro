@@ -3,11 +3,13 @@
 // so they work without JavaScript, can be shared, and are server-rendered from the cached league data.
 export const prerender = false;
 import { FOOTBALL_DATA_API_KEY } from 'astro:env/server';
+import UpdatedNote from '../../components/UpdatedNote.astro';
 import ManUnitedLayout from '../../layouts/ManUnitedLayout.astro';
-import { MAN_UNITED_ID } from '../../lib/football';
+import { footballCacheControl } from '../../lib/football-endpoint';
+import { MAN_UNITED_ID, type WithRefreshStatus } from '../../lib/football';
 import { getPremierLeagueData, type PremierLeagueData, type TableRow, type Venue } from '../../lib/league';
 
-let data: PremierLeagueData | null = null;
+let data: WithRefreshStatus<PremierLeagueData> | null = null;
 if (FOOTBALL_DATA_API_KEY) {
 	try {
 		data = await getPremierLeagueData(FOOTBALL_DATA_API_KEY);
@@ -17,7 +19,7 @@ if (FOOTBALL_DATA_API_KEY) {
 }
 
 if (data) {
-	Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600');
+	Astro.response.headers.set('Cache-Control', footballCacheControl(data.refreshFailed));
 }
 
 const views: { value: Venue; label: string }[] = [
@@ -67,7 +69,6 @@ const rows = sort
 const relegationFrom = view === 'all' && !sort ? table.length - 2 : Infinity;
 
 const outcomeLabel = { W: 'Win', D: 'Draw', L: 'Loss' } as const;
-const updatedFormat = new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 ---
 
@@ -162,9 +163,7 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 					last five games, oldest first.
 					{relegationFrom !== Infinity && ' The line marks the relegation zone.'}
 				</p>
-				<p class="updated">
-					Updated {updatedFormat.format(new Date(data.updatedAt))} · Data from football-data.org
-				</p>
+				<UpdatedNote updatedAt={data.updatedAt} refreshFailed={data.refreshFailed} />
 			</>
 		)
 	}

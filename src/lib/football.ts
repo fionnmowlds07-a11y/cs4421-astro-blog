@@ -173,20 +173,92 @@ export function teamScorers(scorers: ApiScorer[], teamId = MAN_UNITED_ID): Score
 
 // --- Cache ---
 
+export interface CacheOptions {
+	/** How long a value is fresh: served straight from the cache with no refresh. */
+	freshMs: number;
+	/** How long an old value may still be shown while it's refreshed in the background. */
+	maxStaleMs: number;
+	/** After a failed background refresh, how long to wait before trying again (protects the rate limit). */
+	retryMs: number;
+	/** Called when a background refresh fails (foreground failures reach the caller instead). */
+	onRefreshError?: (error: unknown) => void;
+	now?: () => number;
+}
+
+export interface CacheResult<T> {
+	value: T;
+	/** True when the value is old because the last refresh failed. */
+	refreshFailed: boolean;
+}
+
+/** Cached data plus whether it's old because the last refresh failed (shown on the pages and in the APIs). */
+export type WithRefreshStatus<T> = T & { refreshFailed: boolean };
+
+interface CacheEntry<T> {
+	value?: T;
+	loadedAt: number;
+	refreshFailed: boolean;
+	retryAfter: number;
+	inFlight?: Promise<T>;
+}
+
 /**
- * Remembers each loaded value for ttlMs. Concurrent callers share one in-flight request,
- * and failures are not cached, so the next request retries.
+ * A stale-while-revalidate cache. Fresh values are served as they are. Stale values (older than
+ * freshMs, younger than maxStaleMs) are served instantly while one background refresh runs; if that
+ * refresh fails, the old value stays and is flagged. Values older than maxStaleMs, or no value at all,
+ * wait for a load, and a failed load is thrown and not cached, so the next call retries.
+ * Concurrent callers always share one in-flight load.
  */
-export function createTtlCache<T>(ttlMs: number, now: () => number = Date.now) {
-	const entries = new Map<string, { expires: number; value: Promise<T> }>();
+export function createRefreshingCache<T>(options: CacheOptions) {
+	const { freshMs, maxStaleMs, retryMs, onRefreshError, now = Date.now } = options;
+	const entries = new Map<string, CacheEntry<T>>();
+
+	function entryFor(key: string): CacheEntry<T> {
+		let entry = entries.get(key);
+		if (!entry) {
+			entry = { loadedAt: 0, refreshFailed: false, retryAfter: 0 };
+			entries.set(key, entry);
+		}
+		return entry;
+	}
+
+	function startLoad(entry: CacheEntry<T>, load: () => Promise<T>): Promise<T> {
+		if (!entry.inFlight) {
+			entry.inFlight = load()
+				.then((value) => {
+					Object.assign(entry, { value, loadedAt: now(), refreshFailed: false, retryAfter: 0 });
+					return value;
+				})
+				.finally(() => {
+					entry.inFlight = undefined;
+				});
+		}
+		return entry.inFlight;
+	}
+
 	return {
-		async get(key: string, load: () => Promise<T>): Promise<T> {
-			const hit = entries.get(key);
-			if (hit && hit.expires > now()) return hit.value;
-			const value = load();
-			entries.set(key, { expires: now() + ttlMs, value });
-			value.catch(() => entries.delete(key));
-			return value;
+		async get(key: string, load: () => Promise<T>): Promise<CacheResult<T>> {
+			const entry = entryFor(key);
+			const age = now() - entry.loadedAt;
+
+			if (entry.value !== undefined && age < freshMs) {
+				return { value: entry.value, refreshFailed: false };
+			}
+
+			if (entry.value !== undefined && age < maxStaleMs) {
+				if (!entry.inFlight && now() >= entry.retryAfter) {
+					startLoad(entry, load).catch((error: unknown) => {
+						entry.refreshFailed = true;
+						entry.retryAfter = now() + retryMs;
+						onRefreshError?.(error);
+					});
+				}
+				return { value: entry.value, refreshFailed: entry.refreshFailed };
+			}
+
+			// Nothing usable: drop anything too old and wait for a load.
+			entry.value = undefined;
+			return { value: await startLoad(entry, load), refreshFailed: false };
 		},
 		clear() {
 			entries.clear();
@@ -234,10 +306,34 @@ export async function fetchManUnitedSummary(apiKey: string, fetchFn: FetchFn = f
 	};
 }
 
-export const SUMMARY_TTL_MS = 10 * 60 * 1000;
-const summaryCache = createTtlCache<ManUnitedSummary>(SUMMARY_TTL_MS);
+/** Writes one structured JSON log line for a failed football-data.org request. */
+export function logFootballDataError(error: unknown) {
+	console.error(
+		JSON.stringify({
+			timestamp: new Date().toISOString(),
+			level: 'ERROR',
+			event: 'football_data_failed',
+			upstreamStatus: error instanceof FootballDataError ? (error.status ?? null) : null,
+			message: error instanceof Error ? error.message : String(error),
+		}),
+	);
+}
+
+/**
+ * Shared cache settings for football data: fresh for 10 minutes, then shown for up to 24 hours
+ * while refreshing in the background, retrying a failed refresh at most once a minute.
+ */
+export const FOOTBALL_CACHE_OPTIONS = {
+	freshMs: 10 * 60 * 1000,
+	maxStaleMs: 24 * 60 * 60 * 1000,
+	retryMs: 60 * 1000,
+	onRefreshError: logFootballDataError,
+} satisfies CacheOptions;
+
+const summaryCache = createRefreshingCache<ManUnitedSummary>(FOOTBALL_CACHE_OPTIONS);
 
 /** Cached summary: at most 3 API requests per 10 minutes per running server, well inside the free tier. */
-export function getManUnitedSummary(apiKey: string): Promise<ManUnitedSummary> {
-	return summaryCache.get('man-united', () => fetchManUnitedSummary(apiKey));
+export async function getManUnitedSummary(apiKey: string): Promise<WithRefreshStatus<ManUnitedSummary>> {
+	const { value, refreshFailed } = await summaryCache.get('man-united', () => fetchManUnitedSummary(apiKey));
+	return { ...value, refreshFailed };
 }
