@@ -1,0 +1,135 @@
+---
+// Admin login for the rowing log. The form posts back to this page; the server signs in with Supabase
+// and stores the session in httpOnly cookies (src/lib/supabase-session.ts). Astro's security.checkOrigin
+// (on by default) rejects form posts from other websites.
+export const prerender = false;
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from 'astro:env/server';
+import RowingLayout from '../../layouts/RowingLayout.astro';
+import { safeNextPath } from '../../lib/admin-guard';
+import { createSessionClient } from '../../lib/supabase-session';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+const supabase = createSessionClient(
+	{ url: SUPABASE_URL, publishableKey: SUPABASE_PUBLISHABLE_KEY },
+	Astro.request,
+	Astro.cookies,
+);
+const next = safeNextPath(Astro.url.searchParams.get('next'));
+const loggedOut = Astro.url.searchParams.has('logged-out');
+let email = '';
+let error: string | null = null;
+
+if (!supabase) {
+	Astro.response.status = 503;
+} else if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	email = String(form.get('email') ?? '').trim();
+	const password = String(form.get('password') ?? '');
+	const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+	if (!signInError) {
+		return Astro.redirect(next, 303);
+	}
+	// One general message for a wrong email or password, so the form can't reveal which accounts exist.
+	if (signInError.status === 429) {
+		Astro.response.status = 429;
+		error = 'Too many login attempts. Please wait a few minutes and try again.';
+	} else if (signInError.status && signInError.status < 500) {
+		Astro.response.status = 401;
+		error = 'Email or password is incorrect.';
+	} else {
+		Astro.response.status = 503;
+		error = 'Login is unavailable right now. Please try again later.';
+	}
+} else if ((await supabase.auth.getUser()).data.user) {
+	// Already logged in: go straight on.
+	return Astro.redirect(next, 303);
+}
+---
+
+<RowingLayout title="Admin login" heading="Admin login" description="Log in to manage the rowing log." noindex>
+	{
+		!supabase ? (
+			<p class="notice" data-testid="login-unavailable">
+				Login is unavailable right now.
+			</p>
+		) : (
+			<form class="panel login" method="post" data-testid="login-form">
+				{loggedOut && !error && (
+					<p class="notice" role="status">
+						You've logged out.
+					</p>
+				)}
+				{error && (
+					<p class="error" role="alert" data-testid="login-error">
+						{error}
+					</p>
+				)}
+				<label for="email">Email</label>
+				<input id="email" name="email" type="email" autocomplete="username" required value={email} />
+				<label for="password">Password</label>
+				<input id="password" name="password" type="password" autocomplete="current-password" required />
+				<button type="submit">Log in</button>
+			</form>
+		)
+	}
+	<p class="note">Only the site owner can log in. There are no public accounts.</p>
+</RowingLayout>
+
+<style>
+	.login {
+		display: grid;
+		gap: 0.4rem;
+		max-width: 24rem;
+		padding: 1.5rem;
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+	}
+	label {
+		margin-top: 0.5rem;
+		font-size: 0.8em;
+		font-weight: 700;
+		color: rgb(var(--gray-dark));
+	}
+	input {
+		font: inherit;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid rgba(var(--gray-light), 100%);
+		border-radius: 8px;
+		background: var(--surface);
+		color: rgb(var(--black));
+	}
+	button {
+		margin-top: 1rem;
+		font: inherit;
+		font-weight: 700;
+		padding: 0.55rem 1rem;
+		border: none;
+		border-radius: 8px;
+		background: var(--accent);
+		color: #ffffff;
+		cursor: pointer;
+	}
+	.error,
+	.notice {
+		margin: 0;
+		padding: 0.6rem 0.9rem;
+		border-radius: 8px;
+		font-size: 0.85em;
+	}
+	.error {
+		background: rgba(218, 41, 28, 10%);
+		color: #a51d13;
+		font-weight: 700;
+	}
+	.notice {
+		background: rgba(17, 122, 62, 10%);
+		color: var(--accent-dark);
+	}
+	.note {
+		margin-top: 1rem;
+		font-size: 0.75em;
+		color: rgb(var(--gray));
+	}
+</style>

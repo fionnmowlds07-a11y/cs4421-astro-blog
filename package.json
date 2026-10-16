@@ -16,6 +16,7 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:status": "supabase status",
+    "admin:create": "node scripts/create-admin.mjs",
     "astro": "astro"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "@astrojs/node": "^11.1.7",
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "astro": "^7.3.8",
     "sharp": "^0.35.5"

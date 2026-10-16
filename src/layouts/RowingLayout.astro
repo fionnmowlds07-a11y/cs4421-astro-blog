@@ -1,0 +1,34 @@
+---
+// Shared shell for the Rowing tab: UL Rowing theme, header, title and footer.
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { SITE_TITLE } from '../consts';
+
+interface Props {
+	title: string;
+	description: string;
+	heading?: string;
+	/** Login and admin pages ask search engines not to list them. */
+	noindex?: boolean;
+}
+
+const { title, description, heading = 'Rowing', noindex = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme="rowing">
+	<head>
+		<BaseHead title={`${title} | ${SITE_TITLE}`} description={description} />
+		{noindex && <meta name="robots" content="noindex, nofollow" />}
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>{heading}</h1>
+			<span class="stripe" aria-hidden="true"></span>
+			<slot />
+		</main>
+		<Footer />
+	</body>
+</html>

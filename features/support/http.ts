@@ -16,3 +16,15 @@ export async function send(world: ApiWorld, method: string, path: string, body?:
 		world.body = text;
 	}
 }
+
+// Submits an HTML form the way a browser does: URL-encoded fields plus the Origin of the page it came from,
+// which is what Astro's security.checkOrigin compares against the site's own address.
+export async function submitForm(world: ApiWorld, path: string, fields: Record<string, string>, origin: string) {
+	world.response = await fetch(new URL(path, world.baseUrl), {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
+		body: new URLSearchParams(fields).toString(),
+		redirect: 'manual',
+	});
+	world.body = await world.response.text();
+}

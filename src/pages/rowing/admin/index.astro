@@ -1,0 +1,77 @@
+---
+// The rowing admin area. src/middleware.ts has already sent logged-out visitors to the login page
+// and put its decision in Astro.locals.admin. The logging forms come in the next issue.
+export const prerender = false;
+import RowingLayout from '../../../layouts/RowingLayout.astro';
+
+const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
+if (admin.access === 'forbidden') Astro.response.status = 403;
+if (admin.access === 'unavailable') Astro.response.status = 503;
+---
+
+<RowingLayout title="Rowing admin" heading="Rowing admin" description="Manage the rowing log." noindex>
+	{
+		admin.access === 'allow' && (
+			<section class="panel" data-testid="admin-area">
+				<p>
+					Logged in as <strong>{admin.email}</strong>.
+				</p>
+				<p class="note">Forms for adding erg sessions and on-water outings are coming next.</p>
+			</section>
+		)
+	}
+	{
+		admin.access === 'forbidden' && (
+			<section class="panel" data-testid="admin-forbidden">
+				<p>
+					<strong>{admin.email}</strong> isn't allowed to manage the rowing log.
+				</p>
+			</section>
+		)
+	}
+	{
+		admin.access === 'unavailable' && (
+			<p class="panel" data-testid="admin-unavailable">
+				The admin area is unavailable right now. Please try again later.
+			</p>
+		)
+	}
+	{
+		admin.access !== 'unavailable' && (
+			<form method="post" action="/rowing/logout">
+				<button type="submit">Log out</button>
+			</form>
+		)
+	}
+</RowingLayout>
+
+<style>
+	.panel {
+		max-width: 32rem;
+		padding: 1.25rem 1.5rem;
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+	}
+	.panel p {
+		margin: 0;
+	}
+	.panel .note {
+		margin-top: 0.5rem;
+		font-size: 0.8em;
+		color: rgb(var(--gray));
+	}
+	form {
+		margin-top: 1.25rem;
+	}
+	button {
+		font: inherit;
+		font-weight: 700;
+		padding: 0.5rem 1rem;
+		border: 1px solid rgba(var(--gray-light), 100%);
+		border-radius: 8px;
+		background: var(--surface);
+		color: rgb(var(--black));
+		cursor: pointer;
+	}
+</style>
