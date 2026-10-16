@@ -12,6 +12,14 @@ export default defineConfig({
     adapter: node({
         mode: 'standalone',
     }),
+    security: {
+        // checkOrigin (on by default) rejects form posts from other websites, e.g. a fake login form.
+        // It compares the Origin header with the site's own address, and the Node server only trusts the
+        // incoming Host header for domains listed here (otherwise it assumes "localhost"). Add the real
+        // domain when the site is deployed, or logging in there will be refused.
+        checkOrigin: true,
+        allowedDomains: [{ hostname: 'localhost' }, { hostname: '127.0.0.1' }],
+    },
     // The blog moved to /about-me and replaced the template /about page; keep old links (and RSS readers) working.
     redirects: {
         '/about': '/about-me',
