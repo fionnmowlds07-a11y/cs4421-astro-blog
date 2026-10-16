@@ -13,6 +13,9 @@
     "lint": "eslint .",
     "test:unit": "vitest",
     "test:bdd": "cucumber-js",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:status": "supabase status",
     "astro": "astro"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
     "@astrojs/node": "^11.1.7",
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
+    "@supabase/supabase-js": "^2.117.2",
     "astro": "^7.3.8",
     "sharp": "^0.35.5"
   },
@@ -34,6 +38,7 @@
     "eslint-plugin-astro": "^1.7.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "jiti": "^2.7.0",
+    "supabase": "2.119.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.4"

@@ -3,9 +3,12 @@ import { Then, When } from '@cucumber/cucumber';
 import { send } from '../support/http.ts';
 import type { ApiWorld } from '../support/world.ts';
 
+// Reads a field from the JSON body; dots reach into nested objects, e.g. "checks.database.status".
 function field(world: ApiWorld, name: string): unknown {
 	assert.ok(world.body && typeof world.body === 'object', 'response body is not a JSON object');
-	return (world.body as Record<string, unknown>)[name];
+	return name
+		.split('.')
+		.reduce<unknown>((value, key) => (value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined), world.body);
 }
 
 When('I send a GET request to {string}', async function (this: ApiWorld, path: string) {
@@ -39,6 +42,10 @@ Then('the response field {string} should equal {string}', function (this: ApiWor
 
 Then('the response field {string} should contain {string}', function (this: ApiWorld, name: string, expected: string) {
 	assert.ok(String(field(this, name)).includes(expected), `expected "${String(field(this, name))}" to contain "${expected}"`);
+});
+
+Then('the response should not have the field {string}', function (this: ApiWorld, name: string) {
+	assert.equal(field(this, name), undefined, `unexpected field "${name}"`);
 });
 
 Then('the response field {string} should be a UUID', function (this: ApiWorld, name: string) {
