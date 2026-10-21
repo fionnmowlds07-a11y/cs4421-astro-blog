@@ -21,6 +21,10 @@
 	grid-column: 1 / -1;
 }
 
+.admin-form > p {
+	margin: 0;
+}
+
 .field {
 	display: grid;
 	gap: 0.3rem;
@@ -154,7 +158,7 @@
 
 .log-table th,
 .log-table td {
-	padding: 0.55rem 0.75rem;
+	padding: 0.55rem 0.5rem;
 	border-bottom: 1px solid rgba(var(--gray-light), 100%);
 	white-space: nowrap;
 }
@@ -175,6 +179,10 @@
 	min-width: 7rem;
 }
 
+.log-table .session {
+	min-width: 10rem;
+}
+
 .tag {
 	margin-left: 0.4rem;
 	padding: 0.1rem 0.4rem;
@@ -189,4 +197,19 @@
 	border-color: var(--accent);
 	background: var(--accent);
 	color: #ffffff;
+}
+
+.button.danger {
+	border-color: #a51d13;
+	background: #a51d13;
+	color: #ffffff;
+}
+
+.delete-link {
+	margin-top: 1rem;
+	font-size: 0.85em;
+}
+
+.delete-link a {
+	color: #a51d13;
 }

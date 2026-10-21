@@ -5,6 +5,10 @@ import type { AdminAccess } from './admin-guard';
 export const adminStatus = (access: Exclude<AdminAccess, 'login'>) =>
 	access === 'forbidden' ? 403 : access === 'unavailable' ? 503 : 200;
 
+/** Whether an id from the URL looks like a database id, so a made-up link is a 404 rather than a database error. */
+export const isRowId = (id: string | undefined): id is string =>
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id ?? '');
+
 /** The text fields of a submitted form, so it can be shown again exactly as it was typed. */
 export function formValues(form: FormData): Record<string, string> {
 	const values: Record<string, string> = {};

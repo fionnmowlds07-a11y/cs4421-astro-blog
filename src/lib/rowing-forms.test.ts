@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { todayInIreland, validateErgSession, validateOnWaterOuting } from './rowing-forms';
+import {
+	ergSessionValues,
+	onWaterOutingValues,
+	todayInIreland,
+	validateErgSession,
+	validateOnWaterOuting,
+} from './rowing-forms';
 
 const TODAY = '2026-10-21';
 
@@ -137,5 +143,33 @@ describe('todayInIreland', () => {
 		expect(todayInIreland(new Date('2026-10-20T23:30:00Z'))).toBe('2026-10-21');
 		// In winter Ireland is on UTC.
 		expect(todayInIreland(new Date('2026-12-20T23:30:00Z'))).toBe('2026-12-20');
+	});
+});
+
+describe('ergSessionValues and onWaterOutingValues', () => {
+	it('fill the edit form so saving it unchanged gives back the same erg session', () => {
+		const first = validateErgSession(
+			erg({ session_type: 'intervals', description: "4x2k r5'", distance_m: '8000', time: '25:34.0', is_test: 'on' }),
+			TODAY,
+		);
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+		const values = ergSessionValues(first.row);
+		expect(values).toMatchObject({ time: '25:34.0', distance_m: '8000', is_test: 'on', avg_rate: '' });
+		expect(validateErgSession(form(values), TODAY)).toEqual(first);
+	});
+
+	it('leave the test box unticked for a normal session', () => {
+		const result = validateErgSession(erg(), TODAY);
+		expect(result.ok && ergSessionValues(result.row)).not.toHaveProperty('is_test');
+	});
+
+	it('fill the edit form so saving it unchanged gives back the same outing, with or without a time', () => {
+		for (const time of ['', '1:02:30.5']) {
+			const first = validateOnWaterOuting(outing({ time, crew: 'With Jack', avg_rate: '20' }), TODAY);
+			expect(first.ok).toBe(true);
+			if (!first.ok) return;
+			expect(validateOnWaterOuting(form(onWaterOutingValues(first.row)), TODAY)).toEqual(first);
+		}
 	});
 });

@@ -1,0 +1,124 @@
+---
+// Edit or delete one on-water outing. ?delete shows a confirmation step first; the form there posts
+// intent=delete. Changes are made as the logged-in user, so row level security has the final say.
+export const prerender = false;
+import AdminNotice from '../../../../components/rowing/AdminNotice.astro';
+import OnWaterOutingForm from '../../../../components/rowing/OnWaterOutingForm.astro';
+import RowingLayout from '../../../../layouts/RowingLayout.astro';
+import { adminStatus, formValues, isRowId, saveFailure } from '../../../../lib/rowing-admin';
+import { formatDate, formatDistance } from '../../../../lib/rowing-format';
+import { onWaterOutingValues, validateOnWaterOuting, type OnWaterOutingRow } from '../../../../lib/rowing-forms';
+import { formatTime } from '../../../../lib/rowing-time';
+import '../../../../styles/rowing-admin.css';
+
+const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
+Astro.response.status = adminStatus(admin.access);
+
+const { id } = Astro.params;
+const editPath = `/rowing/admin/water/${id}`;
+const confirmingDelete = Astro.url.searchParams.has('delete');
+let saved: OnWaterOutingRow | null = null;
+let values: Record<string, string> = {};
+let errors: Record<string, string> = {};
+let formError: string | null = null;
+let notFound = false;
+
+if (admin.access === 'allow' && admin.supabase) {
+	const outings = () => admin.supabase!.from('on_water_outings');
+
+	if (!isRowId(id)) {
+		notFound = true;
+	} else if (Astro.request.method === 'POST') {
+		const form = await Astro.request.formData();
+		if (form.get('intent') === 'delete') {
+			const { data, error } = await outings().delete().eq('id', id).select('id');
+			if (!error && data.length > 0) return Astro.redirect('/rowing/admin?deleted=outing', 303);
+			if (!error) notFound = true;
+			else {
+				const failure = saveFailure(error);
+				Astro.response.status = failure.status;
+				formError = failure.message;
+			}
+		} else {
+			values = formValues(form);
+			const result = validateOnWaterOuting(form);
+			if (!result.ok) {
+				Astro.response.status = 422;
+				errors = result.errors;
+			} else {
+				const { data, error } = await outings().update(result.row).eq('id', id).select('id');
+				if (!error && data.length > 0) return Astro.redirect('/rowing/admin?saved=outing', 303);
+				if (!error) notFound = true;
+				else {
+					const failure = saveFailure(error);
+					Astro.response.status = failure.status;
+					formError = failure.message;
+				}
+			}
+		}
+	}
+
+	// Load the outing to fill the form or describe it on the confirmation step.
+	if (!notFound && (Astro.request.method !== 'POST' || confirmingDelete)) {
+		const { data, error } = await outings().select('*').eq('id', id).maybeSingle();
+		if (error) {
+			Astro.response.status = 503;
+			formError = "Couldn't load this outing right now.";
+		} else if (!data) {
+			notFound = true;
+		} else {
+			saved = data;
+			if (Astro.request.method !== 'POST') values = onWaterOutingValues(data);
+		}
+	}
+
+	if (notFound) Astro.response.status = 404;
+}
+---
+
+<RowingLayout
+	title={confirmingDelete ? 'Delete on-water outing' : 'Edit on-water outing'}
+	heading={confirmingDelete ? 'Delete on-water outing' : 'Edit on-water outing'}
+	description="Change or delete an on-water outing."
+	noindex
+>
+	{
+		admin.access !== 'allow' ? (
+			<AdminNotice access={admin.access} email={admin.email} />
+		) : notFound ? (
+			<p class="panel" data-testid="not-found">
+				That outing doesn't exist. It may already have been deleted. <a href="/rowing/admin">Back to the admin page</a>
+			</p>
+		) : confirmingDelete ? (
+			<form class="panel admin-form" method="post" data-testid="delete-confirm">
+				{formError && (
+					<p class="form-message error" role="alert" data-testid="form-error">
+						{formError}
+					</p>
+				)}
+				{saved && (
+					<p class="wide">
+						Delete the on-water outing on <strong>{formatDate(saved.outing_date)}</strong>
+						{` (${saved.boat}, ${formatDistance(saved.distance_m)}${saved.duration_ds === null ? '' : ` in ${formatTime(saved.duration_ds)}`})? This can't be undone.`}
+					</p>
+				)}
+				<input type="hidden" name="intent" value="delete" />
+				<div class="form-actions">
+					<button class="button danger" type="submit">
+						Yes, delete it
+					</button>
+					<a class="button" href={editPath}>
+						Cancel
+					</a>
+				</div>
+			</form>
+		) : (
+			<>
+				<OnWaterOutingForm values={values} errors={errors} formError={formError} submitLabel="Save changes" />
+				<p class="delete-link">
+					<a href={`${editPath}?delete`}>Delete this outing…</a>
+				</p>
+			</>
+		)
+	}
+</RowingLayout>

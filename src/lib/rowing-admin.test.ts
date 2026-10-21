@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { adminStatus, formValues, saveFailure } from './rowing-admin';
+import { adminStatus, formValues, isRowId, saveFailure } from './rowing-admin';
+
+describe('isRowId', () => {
+	it('accepts database ids and nothing else', () => {
+		expect(isRowId('3f2b8c4e-9a1d-4e5f-8b7a-1c2d3e4f5a6b')).toBe(true);
+		expect(isRowId(undefined)).toBe(false);
+		expect(isRowId('new')).toBe(false);
+		expect(isRowId('1 or 1=1')).toBe(false);
+		expect(isRowId('3f2b8c4e-9a1d-4e5f-8b7a-1c2d3e4f5a6b/extra')).toBe(false);
+	});
+});
 
 describe('adminStatus', () => {
 	it('matches the status code to the access decision', () => {

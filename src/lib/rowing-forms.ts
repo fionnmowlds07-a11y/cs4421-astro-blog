@@ -1,6 +1,6 @@
 // Checks the admin forms before anything is saved. Pure functions, so every rule can be unit tested;
 // the limits match the check constraints in supabase/migrations/*_rowing_tables.sql.
-import { durationFromSplit, parseTime } from './rowing-time';
+import { durationFromSplit, formatTime, parseTime } from './rowing-time';
 
 export const ERG_MACHINES = ['concept2', 'rp3'] as const;
 export const ERG_SESSION_TYPES = ['single', 'intervals'] as const;
@@ -181,4 +181,37 @@ export function validateOnWaterOuting(form: FormData, today = todayInIreland()):
 	const notes = f.note('notes', 1000, 'Keep the notes under 1000 characters.');
 
 	return f.result({ outing_date, boat, crew, distance_m: distance_m ?? 0, duration_ds, avg_rate, conditions, notes });
+}
+
+const text = (value: string | number | null) => (value === null ? '' : String(value));
+
+/** A saved erg session as form values, for the edit page. The opposite of validateErgSession. */
+export function ergSessionValues(row: ErgSessionRow): Record<string, string> {
+	return {
+		session_date: row.session_date,
+		session_type: row.session_type,
+		description: text(row.description),
+		distance_m: text(row.distance_m),
+		time: formatTime(row.duration_ds),
+		split: '',
+		avg_rate: text(row.avg_rate),
+		avg_heart_rate: text(row.avg_heart_rate),
+		machine: row.machine,
+		notes: text(row.notes),
+		...(row.is_test ? { is_test: 'on' } : {}),
+	};
+}
+
+/** A saved on-water outing as form values, for the edit page. The opposite of validateOnWaterOuting. */
+export function onWaterOutingValues(row: OnWaterOutingRow): Record<string, string> {
+	return {
+		outing_date: row.outing_date,
+		boat: row.boat,
+		crew: text(row.crew),
+		distance_m: text(row.distance_m),
+		time: row.duration_ds === null ? '' : formatTime(row.duration_ds),
+		avg_rate: text(row.avg_rate),
+		conditions: text(row.conditions),
+		notes: text(row.notes),
+	};
 }

@@ -13,11 +13,10 @@ import '../../../styles/rowing-admin.css';
 const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
 Astro.response.status = adminStatus(admin.access);
 
-const SAVED_MESSAGES: Record<string, string> = {
-	erg: 'Erg session saved.',
-	outing: 'On-water outing saved.',
-};
-const saved = SAVED_MESSAGES[Astro.url.searchParams.get('saved') ?? ''];
+const KINDS: Record<string, string> = { erg: 'Erg session', outing: 'On-water outing' };
+const savedKind = KINDS[Astro.url.searchParams.get('saved') ?? ''];
+const deletedKind = KINDS[Astro.url.searchParams.get('deleted') ?? ''];
+const saved = savedKind ? `${savedKind} saved.` : deletedKind ? `${deletedKind} deleted.` : undefined;
 
 // The latest entries of each kind. A failed load only hides that list; the add buttons still work.
 const LIST_SIZE = 25;
@@ -95,13 +94,16 @@ const time = (ds: number | null) => (ds === null ? '–' : formatTime(ds));
 									<th scope="col">Split</th>
 									<th scope="col">Rate</th>
 									<th scope="col">Machine</th>
+									<th scope="col">
+										<span class="sr-only">Actions</span>
+									</th>
 								</tr>
 							</thead>
 							<tbody>
 								{ergSessions.map((s) => (
 									<tr>
 										<td>{formatDate(s.session_date)}</td>
-										<td class="what">
+										<td class="what session">
 											{s.description ?? (s.session_type === 'intervals' ? 'Intervals' : 'Single piece')}
 											{s.is_test && <span class="tag">Test</span>}
 										</td>
@@ -110,6 +112,11 @@ const time = (ds: number | null) => (ds === null ? '–' : formatTime(ds));
 										<td>{time(s.avg_split_ds)}</td>
 										<td>{s.avg_rate ?? '–'}</td>
 										<td>{MACHINE_NAMES[s.machine]}</td>
+										<td>
+											<a href={`/rowing/admin/erg/${s.id}`} aria-label={`Edit erg session on ${formatDate(s.session_date)}`}>
+												Edit
+											</a>
+										</td>
 									</tr>
 								))}
 							</tbody>
@@ -137,6 +144,9 @@ const time = (ds: number | null) => (ds === null ? '–' : formatTime(ds));
 									<th scope="col">Time</th>
 									<th scope="col">Split</th>
 									<th scope="col">Conditions</th>
+									<th scope="col">
+										<span class="sr-only">Actions</span>
+									</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -149,6 +159,11 @@ const time = (ds: number | null) => (ds === null ? '–' : formatTime(ds));
 										<td>{time(o.duration_ds)}</td>
 										<td>{time(o.avg_split_ds)}</td>
 										<td class="what">{o.conditions ?? '–'}</td>
+										<td>
+											<a href={`/rowing/admin/water/${o.id}`} aria-label={`Edit outing on ${formatDate(o.outing_date)}`}>
+												Edit
+											</a>
+										</td>
 									</tr>
 								))}
 							</tbody>
