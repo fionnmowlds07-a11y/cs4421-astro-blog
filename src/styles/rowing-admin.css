@@ -1,0 +1,215 @@
+/* Shared look for the rowing admin pages: panels, forms and messages. */
+
+.panel {
+	max-width: 40rem;
+	padding: 1.25rem 1.5rem;
+	border-radius: 14px;
+	background: var(--surface);
+	box-shadow: 0 1px 3px rgba(var(--black), 8%);
+}
+
+.admin-form {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	gap: 0.9rem 1.25rem;
+}
+
+.admin-form .wide,
+.admin-form fieldset,
+.admin-form .form-actions,
+.admin-form .form-message {
+	grid-column: 1 / -1;
+}
+
+.admin-form > p {
+	margin: 0;
+}
+
+.field {
+	display: grid;
+	gap: 0.3rem;
+	align-content: start;
+}
+
+.field label,
+.admin-form legend {
+	font-size: 0.8em;
+	font-weight: 700;
+	color: rgb(var(--gray-dark));
+}
+
+.field .hint {
+	margin: 0;
+	font-size: 0.75em;
+	color: rgb(var(--gray));
+}
+
+.admin-form input:not([type='checkbox'], [type='radio']),
+.admin-form select,
+.admin-form textarea {
+	width: 100%;
+	box-sizing: border-box;
+	font: inherit;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid rgba(var(--gray-light), 100%);
+	border-radius: 8px;
+	background: var(--surface);
+	color: rgb(var(--black));
+}
+
+.admin-form .field [aria-invalid='true'] {
+	border-color: #da291c;
+}
+
+.admin-form fieldset {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem 1.25rem;
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+
+.admin-form legend {
+	width: 100%;
+	margin-bottom: 0.3rem;
+	padding: 0;
+}
+
+.choice {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.9em;
+}
+
+.field-error {
+	margin: 0;
+	font-size: 0.8em;
+	font-weight: 700;
+	color: #a51d13;
+}
+
+.form-message {
+	margin: 0;
+	padding: 0.6rem 0.9rem;
+	border-radius: 8px;
+	font-size: 0.85em;
+}
+
+.form-message.error {
+	background: rgba(218, 41, 28, 10%);
+	color: #a51d13;
+	font-weight: 700;
+}
+
+.form-message.saved {
+	background: rgba(17, 122, 62, 10%);
+	color: var(--accent-dark);
+	font-weight: 700;
+}
+
+.preview {
+	margin: 0;
+	font-size: 0.85em;
+	font-weight: 700;
+	color: rgb(var(--gray-dark));
+}
+
+.preview:empty {
+	display: none;
+}
+
+.form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.button {
+	display: inline-block;
+	font: inherit;
+	font-weight: 700;
+	padding: 0.55rem 1rem;
+	border: 1px solid rgba(var(--gray-light), 100%);
+	border-radius: 8px;
+	background: var(--surface);
+	color: rgb(var(--black));
+	text-decoration: none;
+	cursor: pointer;
+}
+
+/* The lists of sessions and outings. Wide tables scroll sideways inside their box on phones. */
+.table-wrap {
+	overflow-x: auto;
+	border-radius: 14px;
+	background: var(--surface);
+	box-shadow: 0 1px 3px rgba(var(--black), 8%);
+}
+
+.log-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.8em;
+	font-variant-numeric: tabular-nums;
+	text-align: left;
+}
+
+.log-table th,
+.log-table td {
+	padding: 0.55rem 0.5rem;
+	border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	white-space: nowrap;
+}
+
+.log-table tbody tr:last-child > * {
+	border-bottom: none;
+}
+
+.log-table thead th {
+	font-size: 0.8em;
+	text-transform: uppercase;
+	color: rgb(var(--gray));
+	background: rgba(var(--gray-light), 35%);
+}
+
+.log-table .what {
+	white-space: normal;
+	min-width: 7rem;
+}
+
+.log-table .session {
+	min-width: 10rem;
+}
+
+.tag {
+	margin-left: 0.4rem;
+	padding: 0.1rem 0.4rem;
+	border-radius: 6px;
+	font-size: 0.8em;
+	font-weight: 700;
+	background: var(--accent);
+	color: #ffffff;
+}
+
+.button.primary {
+	border-color: var(--accent);
+	background: var(--accent);
+	color: #ffffff;
+}
+
+.button.danger {
+	border-color: #a51d13;
+	background: #a51d13;
+	color: #ffffff;
+}
+
+.delete-link {
+	margin-top: 1rem;
+	font-size: 0.85em;
+}
+
+.delete-link a {
+	color: #a51d13;
+}

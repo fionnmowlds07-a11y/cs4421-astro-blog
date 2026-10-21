@@ -1,0 +1,43 @@
+---
+// Add an erg session. The form posts back here; it's checked on the server, then saved as the logged-in
+// user, so the database's row level security has the final say on who can write.
+export const prerender = false;
+import AdminNotice from '../../../../components/rowing/AdminNotice.astro';
+import ErgSessionForm from '../../../../components/rowing/ErgSessionForm.astro';
+import RowingLayout from '../../../../layouts/RowingLayout.astro';
+import { adminStatus, formValues, saveFailure } from '../../../../lib/rowing-admin';
+import { todayInIreland, validateErgSession } from '../../../../lib/rowing-forms';
+
+const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
+Astro.response.status = adminStatus(admin.access);
+
+let values: Record<string, string> = { session_date: todayInIreland(), session_type: 'single', machine: 'concept2' };
+let errors: Record<string, string> = {};
+let formError: string | null = null;
+
+if (admin.access === 'allow' && admin.supabase && Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	values = formValues(form);
+	const result = validateErgSession(form);
+	if (!result.ok) {
+		Astro.response.status = 422;
+		errors = result.errors;
+	} else {
+		const { error } = await admin.supabase.from('erg_sessions').insert(result.row);
+		if (!error) return Astro.redirect('/rowing/admin?saved=erg', 303);
+		const failure = saveFailure(error);
+		Astro.response.status = failure.status;
+		formError = failure.message;
+	}
+}
+---
+
+<RowingLayout title="Add erg session" heading="Add erg session" description="Log an erg session." noindex>
+	{
+		admin.access === 'allow' ? (
+			<ErgSessionForm values={values} errors={errors} formError={formError} submitLabel="Save session" />
+		) : (
+			<AdminNotice access={admin.access} email={admin.email} />
+		)
+	}
+</RowingLayout>

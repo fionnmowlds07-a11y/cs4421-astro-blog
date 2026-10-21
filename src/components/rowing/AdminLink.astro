@@ -1,0 +1,24 @@
+---
+// "Log in" for visitors, "Admin" once I'm logged in. Used as a server island (server:defer), so the
+// Rowing page itself stays prerendered and only this link is worked out per visitor, from the
+// httpOnly session cookie. Visitors without a login cookie never cause a call to Supabase.
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from 'astro:env/server';
+import { createSessionClient, hasSessionCookie } from '../../lib/supabase-session';
+import AdminLinkButton from './AdminLinkButton.astro';
+
+// The answer depends on who's asking, so no browser or CDN may reuse it for someone else.
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+let loggedIn = false;
+if (hasSessionCookie(Astro.request)) {
+	const supabase = createSessionClient(
+		{ url: SUPABASE_URL, publishableKey: SUPABASE_PUBLISHABLE_KEY },
+		Astro.request,
+		Astro.cookies,
+	);
+	// getUser() checks the session with Supabase; if that fails, fall back to "Log in".
+	loggedIn = Boolean(supabase && (await supabase.auth.getUser()).data.user);
+}
+---
+
+<AdminLinkButton loggedIn={loggedIn} />

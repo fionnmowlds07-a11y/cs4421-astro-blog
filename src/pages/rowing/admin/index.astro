@@ -1,45 +1,184 @@
 ---
 // The rowing admin area. src/middleware.ts has already sent logged-out visitors to the login page
-// and put its decision in Astro.locals.admin. The logging forms come in the next issue.
+// and put its decision in Astro.locals.admin.
 export const prerender = false;
+import AdminNotice from '../../../components/rowing/AdminNotice.astro';
 import RowingLayout from '../../../layouts/RowingLayout.astro';
+import { adminStatus } from '../../../lib/rowing-admin';
+import { formatDate, formatDistance, MACHINE_NAMES } from '../../../lib/rowing-format';
+import type { ErgSessionRow, OnWaterOutingRow } from '../../../lib/rowing-forms';
+import { formatTime } from '../../../lib/rowing-time';
+import '../../../styles/rowing-admin.css';
 
 const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
-if (admin.access === 'forbidden') Astro.response.status = 403;
-if (admin.access === 'unavailable') Astro.response.status = 503;
+Astro.response.status = adminStatus(admin.access);
+
+const KINDS: Record<string, string> = { erg: 'Erg session', outing: 'On-water outing' };
+const savedKind = KINDS[Astro.url.searchParams.get('saved') ?? ''];
+const deletedKind = KINDS[Astro.url.searchParams.get('deleted') ?? ''];
+const saved = savedKind ? `${savedKind} saved.` : deletedKind ? `${deletedKind} deleted.` : undefined;
+
+// The latest entries of each kind. A failed load only hides that list; the add buttons still work.
+const LIST_SIZE = 25;
+type Saved<Row> = Row & { id: string; avg_split_ds: number | null };
+let ergSessions: Saved<ErgSessionRow>[] | null = null;
+let outings: Saved<OnWaterOutingRow>[] | null = null;
+
+if (admin.access === 'allow' && admin.supabase) {
+	const [erg, water] = await Promise.all([
+		admin.supabase
+			.from('erg_sessions')
+			.select('*')
+			.order('session_date', { ascending: false })
+			.order('created_at', { ascending: false })
+			.limit(LIST_SIZE),
+		admin.supabase
+			.from('on_water_outings')
+			.select('*')
+			.order('outing_date', { ascending: false })
+			.order('created_at', { ascending: false })
+			.limit(LIST_SIZE),
+	]);
+	ergSessions = erg.error ? null : erg.data;
+	outings = water.error ? null : water.data;
+}
+
+const time = (ds: number | null) => (ds === null ? '–' : formatTime(ds));
 ---
 
 <RowingLayout title="Rowing admin" heading="Rowing admin" description="Manage the rowing log." noindex>
 	{
-		admin.access === 'allow' && (
+		admin.access === 'allow' ? (
 			<section class="panel" data-testid="admin-area">
+				{saved && (
+					<p class="form-message saved" role="status" data-testid="saved-message">
+						{saved}
+					</p>
+				)}
 				<p>
 					Logged in as <strong>{admin.email}</strong>.
 				</p>
-				<p class="note">Forms for adding erg sessions and on-water outings are coming next.</p>
+				<div class="form-actions">
+					<a class="button primary" href="/rowing/admin/erg/new">
+						Add erg session
+					</a>
+					<a class="button primary" href="/rowing/admin/water/new">
+						Add on-water outing
+					</a>
+				</div>
 			</section>
+		) : (
+			<AdminNotice access={admin.access} email={admin.email} />
 		)
 	}
 	{
-		admin.access === 'forbidden' && (
-			<section class="panel" data-testid="admin-forbidden">
-				<p>
-					<strong>{admin.email}</strong> isn't allowed to manage the rowing log.
-				</p>
-			</section>
-		)
-	}
-	{
-		admin.access === 'unavailable' && (
-			<p class="panel" data-testid="admin-unavailable">
-				The admin area is unavailable right now. Please try again later.
-			</p>
+		admin.access === 'allow' && (
+			<>
+				<h2>Erg sessions</h2>
+				{ergSessions === null ? (
+					<p class="form-message error" data-testid="erg-list-error">
+						Couldn't load your erg sessions right now.
+					</p>
+				) : ergSessions.length === 0 ? (
+					<p class="empty">No erg sessions yet.</p>
+				) : (
+					<div class="table-wrap">
+						<table class="log-table" data-testid="erg-list">
+							<caption class="sr-only">Latest {LIST_SIZE} erg sessions</caption>
+							<thead>
+								<tr>
+									<th scope="col">Date</th>
+									<th scope="col">Session</th>
+									<th scope="col">Distance</th>
+									<th scope="col">Time</th>
+									<th scope="col">Split</th>
+									<th scope="col">Rate</th>
+									<th scope="col">Machine</th>
+									<th scope="col">
+										<span class="sr-only">Actions</span>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{ergSessions.map((s) => (
+									<tr>
+										<td>{formatDate(s.session_date)}</td>
+										<td class="what session">
+											{s.description ?? (s.session_type === 'intervals' ? 'Intervals' : 'Single piece')}
+											{s.is_test && <span class="tag">Test</span>}
+										</td>
+										<td>{formatDistance(s.distance_m)}</td>
+										<td>{time(s.duration_ds)}</td>
+										<td>{time(s.avg_split_ds)}</td>
+										<td>{s.avg_rate ?? '–'}</td>
+										<td>{MACHINE_NAMES[s.machine]}</td>
+										<td>
+											<a href={`/rowing/admin/erg/${s.id}`} aria-label={`Edit erg session on ${formatDate(s.session_date)}`}>
+												Edit
+											</a>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+
+				<h2>On-water outings</h2>
+				{outings === null ? (
+					<p class="form-message error" data-testid="outing-list-error">
+						Couldn't load your outings right now.
+					</p>
+				) : outings.length === 0 ? (
+					<p class="empty">No outings yet.</p>
+				) : (
+					<div class="table-wrap">
+						<table class="log-table" data-testid="outing-list">
+							<caption class="sr-only">Latest {LIST_SIZE} on-water outings</caption>
+							<thead>
+								<tr>
+									<th scope="col">Date</th>
+									<th scope="col">Boat</th>
+									<th scope="col">Crew</th>
+									<th scope="col">Distance</th>
+									<th scope="col">Time</th>
+									<th scope="col">Split</th>
+									<th scope="col">Conditions</th>
+									<th scope="col">
+										<span class="sr-only">Actions</span>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{outings.map((o) => (
+									<tr>
+										<td>{formatDate(o.outing_date)}</td>
+										<td>{o.boat}</td>
+										<td class="what">{o.crew ?? '–'}</td>
+										<td>{formatDistance(o.distance_m)}</td>
+										<td>{time(o.duration_ds)}</td>
+										<td>{time(o.avg_split_ds)}</td>
+										<td class="what">{o.conditions ?? '–'}</td>
+										<td>
+											<a href={`/rowing/admin/water/${o.id}`} aria-label={`Edit outing on ${formatDate(o.outing_date)}`}>
+												Edit
+											</a>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</>
 		)
 	}
 	{
 		admin.access !== 'unavailable' && (
-			<form method="post" action="/rowing/logout">
-				<button type="submit">Log out</button>
+			<form class="logout" method="post" action="/rowing/logout">
+				<button class="button" type="submit">
+					Log out
+				</button>
 			</form>
 		)
 	}
@@ -47,31 +186,20 @@ if (admin.access === 'unavailable') Astro.response.status = 503;
 
 <style>
 	.panel {
-		max-width: 32rem;
-		padding: 1.25rem 1.5rem;
-		border-radius: 14px;
-		background: var(--surface);
-		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+		display: grid;
+		gap: 1rem;
 	}
 	.panel p {
 		margin: 0;
 	}
-	.panel .note {
-		margin-top: 0.5rem;
-		font-size: 0.8em;
-		color: rgb(var(--gray));
-	}
-	form {
+	.logout {
 		margin-top: 1.25rem;
 	}
-	button {
-		font: inherit;
-		font-weight: 700;
-		padding: 0.5rem 1rem;
-		border: 1px solid rgba(var(--gray-light), 100%);
-		border-radius: 8px;
-		background: var(--surface);
-		color: rgb(var(--black));
-		cursor: pointer;
+	h2 {
+		margin: 2rem 0 0.75rem;
+		font-size: 1.4em;
+	}
+	.empty {
+		color: rgb(var(--gray));
 	}
 </style>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cookieAdapter, createSessionClient, SESSION_COOKIE_OPTIONS } from './supabase-session';
+import { cookieAdapter, createSessionClient, hasSessionCookie, SESSION_COOKIE_OPTIONS } from './supabase-session';
 
 const request = (cookie?: string) => new Request('http://localhost/rowing/admin', { headers: cookie ? { cookie } : {} });
 const jar = () => ({ set: vi.fn() });
@@ -46,5 +46,21 @@ describe('createSessionClient', () => {
 	it('returns a client acting for whoever the request cookies belong to', () => {
 		const client = createSessionClient({ url: 'http://127.0.0.1:54321', publishableKey: 'sb_publishable_test' }, request(), jar());
 		expect(client?.auth).toBeDefined();
+	});
+});
+
+describe('hasSessionCookie', () => {
+	const request = (cookie?: string) => new Request('http://localhost/rowing', cookie ? { headers: { cookie } } : {});
+
+	it('spots a Supabase login cookie, whole or split into parts', () => {
+		expect(hasSessionCookie(request('sb-127-auth-token=base64-abc'))).toBe(true);
+		expect(hasSessionCookie(request('theme=dark; sb-sdeutzqfwyfataqwxvur-auth-token.0=base64-abc'))).toBe(true);
+	});
+
+	it('ignores visitors without one', () => {
+		expect(hasSessionCookie(request())).toBe(false);
+		expect(hasSessionCookie(request('theme=dark'))).toBe(false);
+		expect(hasSessionCookie(request('sb-127-auth-token='))).toBe(false);
+		expect(hasSessionCookie(request('sb-127-auth-token-code-verifier=abc'))).toBe(false);
 	});
 });

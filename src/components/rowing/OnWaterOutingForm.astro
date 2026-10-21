@@ -1,0 +1,110 @@
+---
+// The on-water outing form, used for adding and (later) editing. The server checks everything
+// (src/lib/rowing-forms.ts).
+import '../../styles/rowing-admin.css';
+import { BOAT_CLASSES, todayInIreland } from '../../lib/rowing-forms';
+import Field from './Field.astro';
+
+interface Props {
+	values: Record<string, string>;
+	errors: Record<string, string>;
+	/** A message about the whole form, e.g. when the database couldn't save. */
+	formError?: string | null;
+	submitLabel: string;
+}
+
+const { values, errors, formError, submitLabel } = Astro.props;
+const hasErrors = Object.keys(errors).length > 0;
+---
+
+<form class="panel admin-form" method="post" data-testid="outing-form" novalidate>
+	{
+		(formError || hasErrors) && (
+			<p class="form-message error" role="alert" data-testid="form-error">
+				{formError ?? 'Some fields need fixing. See the messages below.'}
+			</p>
+		)
+	}
+
+	<Field
+		name="outing_date"
+		label="Date"
+		type="date"
+		required
+		max={todayInIreland()}
+		value={values.outing_date}
+		error={errors.outing_date}
+	/>
+
+	<div class="field">
+		<label for="boat">Boat</label>
+		<select
+			id="boat"
+			name="boat"
+			aria-invalid={errors.boat ? 'true' : undefined}
+			aria-describedby={errors.boat ? 'boat-error' : undefined}
+		>
+			{
+				BOAT_CLASSES.map((boat) => (
+					<option value={boat} selected={values.boat === boat}>
+						{boat}
+					</option>
+				))
+			}
+		</select>
+		{errors.boat && <p class="field-error" id="boat-error">{errors.boat}</p>}
+	</div>
+
+	<Field name="crew" class="wide" label="Crew" maxlength={200} value={values.crew} error={errors.crew} />
+
+	<Field
+		name="distance_m"
+		label="Distance (m)"
+		hint="e.g. 12000"
+		inputmode="numeric"
+		required
+		value={values.distance_m}
+		error={errors.distance_m}
+	/>
+	<Field
+		name="time"
+		label="Time (optional)"
+		hint="1:02:30.5 or 6:12.0"
+		autocomplete="off"
+		value={values.time}
+		error={errors.time}
+	/>
+	<Field
+		name="avg_rate"
+		label="Rate (spm)"
+		inputmode="numeric"
+		value={values.avg_rate}
+		error={errors.avg_rate}
+	/>
+	<Field
+		name="conditions"
+		label="Conditions"
+		hint="e.g. Flat, windy, strong stream"
+		maxlength={80}
+		value={values.conditions}
+		error={errors.conditions}
+	/>
+
+	<div class="field wide">
+		<label for="notes">Notes</label>
+		<textarea
+			id="notes"
+			name="notes"
+			rows="3"
+			maxlength="1000"
+			aria-invalid={errors.notes ? 'true' : undefined}
+			aria-describedby={errors.notes ? 'notes-error' : undefined}>{values.notes}</textarea
+		>
+		{errors.notes && <p class="field-error" id="notes-error">{errors.notes}</p>}
+	</div>
+
+	<div class="form-actions">
+		<button class="button primary" type="submit">{submitLabel}</button>
+		<a class="button" href="/rowing/admin">Cancel</a>
+	</div>
+</form>

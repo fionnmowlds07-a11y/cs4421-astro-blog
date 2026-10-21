@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Then, When } from '@cucumber/cucumber';
+import { type DataTable, Then, When } from '@cucumber/cucumber';
 import { send, submitForm } from '../support/http.ts';
 import type { ApiWorld } from '../support/world.ts';
 
@@ -78,6 +78,29 @@ When('I submit the login form on {string}', async function (this: ApiWorld, path
 
 When('another website submits a login form to {string}', async function (this: ApiWorld, path: string) {
 	await submitForm(this, path, LOGIN_FIELDS, 'https://evil.example');
+});
+
+// A complete, valid erg session, so only the login (or the origin) can stop it being saved.
+const ERG_SESSION_FIELDS = {
+	session_date: '2026-10-20',
+	session_type: 'single',
+	distance_m: '2000',
+	time: '6:12.0',
+	machine: 'concept2',
+};
+
+When('I submit a rowing form to {string} with:', async function (this: ApiWorld, path: string, table: DataTable) {
+	await submitForm(this, path, table.rowsHash(), new URL(this.baseUrl).origin);
+});
+
+When('another website submits an erg session to {string}', async function (this: ApiWorld, path: string) {
+	await submitForm(this, path, ERG_SESSION_FIELDS, 'https://evil.example');
+});
+
+// Saving or deleting always ends in a redirect back to the admin page, so no redirect means nothing changed.
+Then('nothing should have been saved', function (this: ApiWorld) {
+	assert.notEqual(this.response?.status, 303);
+	assert.equal(this.response?.headers.get('location'), null);
 });
 
 Then('the page should ask search engines not to list it', function (this: ApiWorld) {

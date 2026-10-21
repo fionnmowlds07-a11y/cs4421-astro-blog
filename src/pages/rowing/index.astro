@@ -4,6 +4,8 @@ export const prerender = true;
 import BaseHead from '../../components/BaseHead.astro';
 import Footer from '../../components/Footer.astro';
 import Header from '../../components/Header.astro';
+import AdminLink from '../../components/rowing/AdminLink.astro';
+import AdminLinkButton from '../../components/rowing/AdminLinkButton.astro';
 import { SITE_TITLE } from '../../consts';
 ---
 
@@ -18,7 +20,18 @@ import { SITE_TITLE } from '../../consts';
 			<h1>Rowing</h1>
 			<span class="stripe" aria-hidden="true"></span>
 			<p>My rowing training log, with sessions, distances and splits, is coming soon.</p>
+			<p class="owner">
+				<AdminLink server:defer>
+					<AdminLinkButton slot="fallback" loggedIn={false} />
+				</AdminLink>
+			</p>
 		</main>
 		<Footer />
 	</body>
 </html>
+
+<style>
+	.owner {
+		margin-top: 3rem;
+	}
+</style>

@@ -50,3 +50,13 @@ export function createSessionClient(
 	if (!url || !publishableKey) return null;
 	return createServerClient(url, publishableKey, { cookies: cookieAdapter(request, cookies) });
 }
+
+/**
+ * Whether the request carries a Supabase login cookie (sb-<project>-auth-token, possibly split into .0, .1 …).
+ * Lets public pages skip asking Supabase about visitors who have never logged in.
+ */
+export function hasSessionCookie(request: Request): boolean {
+	return parseCookieHeader(request.headers.get('cookie') ?? '').some(
+		({ name, value }) => /^sb-.+-auth-token(\.\d+)?$/.test(name) && Boolean(value),
+	);
+}
