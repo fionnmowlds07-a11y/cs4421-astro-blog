@@ -2,13 +2,13 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 -- Start from empty tables so the sample data from seed.sql can't affect the results (undone by the rollback).
-truncate public.erg_sessions, public.on_water_outings;
+truncate public.erg_intervals, public.erg_sessions, public.on_water_outings;
 select plan(17);
 
 -- Two test logins (rolled back at the end): one admin, one stranger.
 insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-00000000000a', 'admin@example.test'),
-  ('00000000-0000-0000-0000-00000000000b', 'stranger@example.test');
+  ('00000000-0000-0000-0000-00000000000a', 'pgtap-admin@example.test'),
+  ('00000000-0000-0000-0000-00000000000b', 'pgtap-stranger@example.test');
 insert into public.admins (user_id) values ('00000000-0000-0000-0000-00000000000a');
 insert into public.erg_sessions (distance_m, duration_ds, notes) values (2000, 4000, 'original');
 insert into public.on_water_outings (boat, distance_m) values ('1x', 10000);
