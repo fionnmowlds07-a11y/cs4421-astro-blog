@@ -31,6 +31,27 @@ Feature: Rowing log admin
     Then the response status should be 503
     And nothing should have been saved
 
+  Scenario: Logging an interval session piece by piece without a working login saves nothing
+    When I submit a rowing form to "/rowing/admin/erg/new" with:
+      | session_date     | 2026-10-20 |
+      | session_type     | intervals  |
+      | machine          | concept2   |
+      | piece_count      | 2          |
+      | piece_1_distance | 1000       |
+      | piece_1_time     | 3:10.0     |
+      | piece_2_time     | 3:08.5     |
+    Then the response status should be 503
+    And nothing should have been saved
+
+  Scenario: Asking for the piece rows without a working login shows no form
+    When I submit a rowing form to "/rowing/admin/erg/new" with:
+      | session_type | intervals  |
+      | piece_count  | 5          |
+      | intent       | set-pieces |
+    Then the response status should be 503
+    And the page should not show the "erg-form" element
+    And nothing should have been saved
+
   Scenario: Deleting without a working login deletes nothing
     When I submit a rowing form to "/rowing/admin/erg/3f2b8c4e-9a1d-4e5f-8b7a-1c2d3e4f5a6b?delete" with:
       | intent | delete |
