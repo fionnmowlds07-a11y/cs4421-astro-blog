@@ -136,6 +136,55 @@
 	cursor: pointer;
 }
 
+/* The lists of sessions and outings. Wide tables scroll sideways inside their box on phones. */
+.table-wrap {
+	overflow-x: auto;
+	border-radius: 14px;
+	background: var(--surface);
+	box-shadow: 0 1px 3px rgba(var(--black), 8%);
+}
+
+.log-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.8em;
+	font-variant-numeric: tabular-nums;
+	text-align: left;
+}
+
+.log-table th,
+.log-table td {
+	padding: 0.55rem 0.75rem;
+	border-bottom: 1px solid rgba(var(--gray-light), 100%);
+	white-space: nowrap;
+}
+
+.log-table tbody tr:last-child > * {
+	border-bottom: none;
+}
+
+.log-table thead th {
+	font-size: 0.8em;
+	text-transform: uppercase;
+	color: rgb(var(--gray));
+	background: rgba(var(--gray-light), 35%);
+}
+
+.log-table .what {
+	white-space: normal;
+	min-width: 7rem;
+}
+
+.tag {
+	margin-left: 0.4rem;
+	padding: 0.1rem 0.4rem;
+	border-radius: 6px;
+	font-size: 0.8em;
+	font-weight: 700;
+	background: var(--accent);
+	color: #ffffff;
+}
+
 .button.primary {
 	border-color: var(--accent);
 	background: var(--accent);
