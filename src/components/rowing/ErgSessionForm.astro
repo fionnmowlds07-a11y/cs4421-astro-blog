@@ -1,0 +1,171 @@
+---
+// The erg session form, used for adding and (later) editing. The server checks everything
+// (src/lib/rowing-forms.ts); the small script only previews the split while typing.
+import '../../styles/rowing-admin.css';
+import { todayInIreland } from '../../lib/rowing-forms';
+import Field from './Field.astro';
+
+interface Props {
+	values: Record<string, string>;
+	errors: Record<string, string>;
+	/** A message about the whole form, e.g. when the database couldn't save. */
+	formError?: string | null;
+	submitLabel: string;
+}
+
+const { values, errors, formError, submitLabel } = Astro.props;
+const hasErrors = Object.keys(errors).length > 0;
+const invalid = (name: string) => (errors[name] ? 'true' : undefined);
+const describedBy = (name: string) => (errors[name] ? `${name}-error` : undefined);
+---
+
+<form class="panel admin-form" method="post" data-erg-form data-testid="erg-form" novalidate>
+	{
+		(formError || hasErrors) && (
+			<p class="form-message error" role="alert" data-testid="form-error">
+				{formError ?? 'Some fields need fixing. See the messages below.'}
+			</p>
+		)
+	}
+
+	<Field
+		name="session_date"
+		label="Date"
+		type="date"
+		required
+		max={todayInIreland()}
+		value={values.session_date}
+		error={errors.session_date}
+	/>
+
+	<fieldset aria-describedby={describedBy('session_type')}>
+		<legend>Type</legend>
+		<label class="choice">
+			<input type="radio" name="session_type" value="single" checked={values.session_type !== 'intervals'} />
+			Single piece
+		</label>
+		<label class="choice">
+			<input type="radio" name="session_type" value="intervals" checked={values.session_type === 'intervals'} />
+			Intervals
+		</label>
+		{errors.session_type && <p class="field-error" id="session_type-error">{errors.session_type}</p>}
+	</fieldset>
+
+	<Field
+		name="description"
+		class="wide"
+		label="Description"
+		hint="Needed for intervals, e.g. 4x2k r5'"
+		maxlength={80}
+		value={values.description}
+		error={errors.description}
+	/>
+
+	<Field
+		name="distance_m"
+		label="Distance (m)"
+		hint="e.g. 2000"
+		inputmode="numeric"
+		required
+		value={values.distance_m}
+		error={errors.distance_m}
+	/>
+	<Field
+		name="time"
+		label="Time"
+		hint="6:12.0, 1:02:30.5 or 6120"
+		autocomplete="off"
+		value={values.time}
+		error={errors.time}
+	/>
+	<Field
+		name="split"
+		label="Or split /500m"
+		hint="Single pieces only, e.g. 1:45.0"
+		autocomplete="off"
+		value={values.split}
+		error={errors.split}
+	/>
+	<p class="preview wide" aria-live="polite" data-split-preview></p>
+
+	<Field
+		name="avg_rate"
+		label="Rate (spm)"
+		inputmode="numeric"
+		value={values.avg_rate}
+		error={errors.avg_rate}
+	/>
+	<Field
+		name="avg_heart_rate"
+		label="Heart rate (bpm)"
+		inputmode="numeric"
+		value={values.avg_heart_rate}
+		error={errors.avg_heart_rate}
+	/>
+
+	<div class="field">
+		<label for="machine">Machine</label>
+		<select id="machine" name="machine" aria-invalid={invalid('machine')} aria-describedby={describedBy('machine')}>
+			<option value="concept2" selected={values.machine !== 'rp3'}>Concept2</option>
+			<option value="rp3" selected={values.machine === 'rp3'}>RP3</option>
+		</select>
+		{errors.machine && <p class="field-error" id="machine-error">{errors.machine}</p>}
+	</div>
+
+	<label class="choice wide">
+		<input type="checkbox" name="is_test" checked={values.is_test === 'on'} />
+		This was a test (single tests count towards my PBs)
+	</label>
+
+	<div class="field wide">
+		<label for="notes">Notes</label>
+		<textarea
+			id="notes"
+			name="notes"
+			rows="3"
+			maxlength="1000"
+			aria-invalid={invalid('notes')}
+			aria-describedby={describedBy('notes')}>{values.notes}</textarea
+		>
+		{errors.notes && <p class="field-error" id="notes-error">{errors.notes}</p>}
+	</div>
+
+	<div class="form-actions">
+		<button class="button primary" type="submit">{submitLabel}</button>
+		<a class="button" href="/rowing/admin">Cancel</a>
+	</div>
+</form>
+
+<script>
+	import { durationFromSplit, formatTime, parseTime, splitFor } from '../../lib/rowing-time';
+
+	// Shows the split (or the total time, when a split is typed) before saving.
+	function initSplitPreview() {
+		const form = document.querySelector<HTMLFormElement>('[data-erg-form]');
+		const preview = form?.querySelector<HTMLElement>('[data-split-preview]');
+		if (!form || !preview || form.dataset.previewReady) return;
+		form.dataset.previewReady = 'true';
+
+		const update = () => {
+			const data = new FormData(form);
+			const distance = Number(data.get('distance_m'));
+			const time = parseTime(String(data.get('time') ?? ''));
+			const split = parseTime(String(data.get('split') ?? ''));
+			if (!Number.isInteger(distance) || distance < 100) {
+				preview.textContent = '';
+			} else if (time !== null) {
+				preview.textContent = `Split: ${formatTime(splitFor(distance, time))} /500m`;
+			} else if (split !== null) {
+				preview.textContent = `Total time: ${formatTime(durationFromSplit(distance, split))}`;
+			} else {
+				preview.textContent = '';
+			}
+		};
+		form.addEventListener('input', update);
+		update();
+	}
+
+	// Inline scripts run after the first astro:page-load, so start now as well as on later navigations.
+	initSplitPreview();
+	document.addEventListener('astro:page-load', initSplitPreview);
+</script>

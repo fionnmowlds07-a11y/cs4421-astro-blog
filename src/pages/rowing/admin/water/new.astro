@@ -1,0 +1,43 @@
+---
+// Add an on-water outing. Works like the erg session page: checked on the server, then saved as the
+// logged-in user so the database's row level security has the final say.
+export const prerender = false;
+import AdminNotice from '../../../../components/rowing/AdminNotice.astro';
+import OnWaterOutingForm from '../../../../components/rowing/OnWaterOutingForm.astro';
+import RowingLayout from '../../../../layouts/RowingLayout.astro';
+import { adminStatus, formValues, saveFailure } from '../../../../lib/rowing-admin';
+import { todayInIreland, validateOnWaterOuting } from '../../../../lib/rowing-forms';
+
+const admin = Astro.locals.admin ?? { access: 'unavailable' as const };
+Astro.response.status = adminStatus(admin.access);
+
+let values: Record<string, string> = { outing_date: todayInIreland(), boat: '1x' };
+let errors: Record<string, string> = {};
+let formError: string | null = null;
+
+if (admin.access === 'allow' && admin.supabase && Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	values = formValues(form);
+	const result = validateOnWaterOuting(form);
+	if (!result.ok) {
+		Astro.response.status = 422;
+		errors = result.errors;
+	} else {
+		const { error } = await admin.supabase.from('on_water_outings').insert(result.row);
+		if (!error) return Astro.redirect('/rowing/admin?saved=outing', 303);
+		const failure = saveFailure(error);
+		Astro.response.status = failure.status;
+		formError = failure.message;
+	}
+}
+---
+
+<RowingLayout title="Add on-water outing" heading="Add on-water outing" description="Log an outing." noindex>
+	{
+		admin.access === 'allow' ? (
+			<OnWaterOutingForm values={values} errors={errors} formError={formError} submitLabel="Save outing" />
+		) : (
+			<AdminNotice access={admin.access} email={admin.email} />
+		)
+	}
+</RowingLayout>

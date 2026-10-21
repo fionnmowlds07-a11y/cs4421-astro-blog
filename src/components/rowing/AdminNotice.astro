@@ -1,0 +1,26 @@
+---
+// What admin pages show instead of their content when the visitor isn't allowed in,
+// or Supabase can't be reached. The page sets the matching status code (see adminStatus).
+import '../../styles/rowing-admin.css';
+
+interface Props {
+	access: 'forbidden' | 'unavailable';
+	email?: string;
+}
+
+const { access, email } = Astro.props;
+---
+
+{
+	access === 'forbidden' ? (
+		<section class="panel" data-testid="admin-forbidden">
+			<p>
+				<strong>{email}</strong> isn't allowed to manage the rowing log.
+			</p>
+		</section>
+	) : (
+		<p class="panel" data-testid="admin-unavailable">
+			The admin area is unavailable right now. Please try again later.
+		</p>
+	)
+}
