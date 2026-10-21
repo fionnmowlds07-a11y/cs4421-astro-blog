@@ -3,8 +3,8 @@
 // Rowing page itself stays prerendered and only this link is worked out per visitor, from the
 // httpOnly session cookie. Visitors without a login cookie never cause a call to Supabase.
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from 'astro:env/server';
-import { ADMIN_PATH, LOGIN_PATH } from '../../lib/admin-guard';
 import { createSessionClient, hasSessionCookie } from '../../lib/supabase-session';
+import AdminLinkButton from './AdminLinkButton.astro';
 
 // The answer depends on who's asking, so no browser or CDN may reuse it for someone else.
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -21,4 +21,4 @@ if (hasSessionCookie(Astro.request)) {
 }
 ---
 
-<a href={loggedIn ? ADMIN_PATH : LOGIN_PATH} data-testid="admin-link">{loggedIn ? 'Admin' : 'Log in'}</a>
+<AdminLinkButton loggedIn={loggedIn} />
