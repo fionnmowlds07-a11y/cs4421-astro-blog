@@ -23,7 +23,7 @@ if (admin.access === 'allow' && admin.supabase && Astro.request.method === 'POST
 		Astro.response.status = 422;
 		errors = result.errors;
 	} else {
-		const { error } = await admin.supabase.from('erg_sessions').insert(result.row);
+		const { error } = await admin.supabase.from('erg_sessions').insert(result.row.session);
 		if (!error) return Astro.redirect('/rowing/admin?saved=erg', 303);
 		const failure = saveFailure(error);
 		Astro.response.status = failure.status;

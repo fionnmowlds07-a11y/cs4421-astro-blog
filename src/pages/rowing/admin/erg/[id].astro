@@ -46,7 +46,7 @@ if (admin.access === 'allow' && admin.supabase) {
 				Astro.response.status = 422;
 				errors = result.errors;
 			} else {
-				const { data, error } = await sessions().update(result.row).eq('id', id).select('id');
+				const { data, error } = await sessions().update(result.row.session).eq('id', id).select('id');
 				if (!error && data.length > 0) return Astro.redirect('/rowing/admin?saved=erg', 303);
 				if (!error) notFound = true;
 				else {
