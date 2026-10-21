@@ -1,5 +1,5 @@
 // Checks the admin forms before anything is saved. Pure functions, so every rule can be unit tested;
-// the limits match the check constraints in supabase/migrations/*_rowing_tables.sql.
+// the limits match the check constraints in supabase/migrations/*_rowing_tables.sql and *_erg_intervals.sql.
 import { durationFromSplit, formatTime, parseTime } from './rowing-time';
 
 export const ERG_MACHINES = ['concept2', 'rp3'] as const;
@@ -18,6 +18,22 @@ export interface ErgSessionRow {
 	is_test: boolean;
 	notes: string | null;
 }
+
+/** One piece of an interval session; its split is worked out by the database. */
+export interface ErgPiece {
+	distance_m: number;
+	duration_ds: number;
+	avg_rate: number | null;
+}
+
+/** What save_erg_session() takes: the session, plus its pieces for an interval session entered piece by piece. */
+export interface ErgSessionInput {
+	session: ErgSessionRow;
+	pieces: ErgPiece[];
+}
+
+export const MIN_PIECES = 2;
+export const MAX_PIECES = 20;
 
 export interface OnWaterOutingRow {
 	outing_date: string;
@@ -121,19 +137,88 @@ const splitIsPlausible = (distanceM: number, durationDs: number) => {
 	return split >= 600 && split <= 6000;
 };
 
-export function validateErgSession(form: FormData, today = todayInIreland()): FormResult<ErgSessionRow> {
+const SPLIT_MESSAGE = 'That works out at a split outside 1:00.0 to 10:00.0 per 500 m. Check the time and distance.';
+
+/** "1k", "500m", "1500m": how rowers write piece distances. */
+const pieceDistance = (metres: number) => (metres % 1000 === 0 ? `${metres / 1000}k` : `${metres}m`);
+
+/** A description for the pieces if none was typed: 5x1k for equal distances, 4x5' for equal whole minutes. */
+export function describePieces(pieces: ErgPiece[]): string {
+	const [first] = pieces;
+	if (pieces.every((p) => p.distance_m === first.distance_m)) return `${pieces.length}x${pieceDistance(first.distance_m)}`;
+	if (first.duration_ds % 600 === 0 && pieces.every((p) => p.duration_ds === first.duration_ds)) {
+		return `${pieces.length}x${first.duration_ds / 600}'`;
+	}
+	return `${pieces.length} pieces`;
+}
+
+/** piece_1_distance, piece_1_time, piece_1_rate, … An empty distance copies the piece above (so 5x1k is one 1000). */
+function readPieces(f: Fields, count: number): ErgPiece[] {
+	const pieces: ErgPiece[] = [];
+	let previousDistance: number | null = null;
+	for (let n = 1; n <= count; n++) {
+		const distanceName = `piece_${n}_distance`;
+		const timeName = `piece_${n}_time`;
+		const typed = f.whole(distanceName, 100, 100000, DISTANCE_MESSAGE);
+		const distance = typed ?? (f.errors[distanceName] ? null : previousDistance);
+		// Only the first piece without a distance gets the message; the ones below it would copy it once fixed.
+		const copiesAMissingDistance = n > 1 && typed === null && previousDistance === null;
+		if (distance === null && !f.errors[distanceName] && !copiesAMissingDistance) {
+			f.errors[distanceName] = DISTANCE_MESSAGE;
+		}
+		if (typed !== null) previousDistance = typed;
+
+		const duration = f.time(timeName, TIME_MESSAGE);
+		if (duration === null && !f.errors[timeName]) f.errors[timeName] = TIME_MESSAGE;
+		const rate = f.whole(`piece_${n}_rate`, 10, 60, RATE_MESSAGE);
+
+		if (distance !== null && duration !== null) {
+			if (!splitIsPlausible(distance, duration)) f.errors[timeName] = SPLIT_MESSAGE;
+			pieces.push({ distance_m: distance, duration_ds: duration, avg_rate: rate });
+		}
+	}
+	return pieces;
+}
+
+
+export function validateErgSession(form: FormData, today = todayInIreland()): FormResult<ErgSessionInput> {
 	const f = new Fields(form);
 	const session_date = f.date('session_date', today);
 	const session_type = f.choice('session_type', ERG_SESSION_TYPES, 'Pick single piece or intervals.');
-	const description = f.note('description', 80, 'Keep the description under 80 characters.');
-	const distance_m = f.whole('distance_m', 100, 100000, DISTANCE_MESSAGE, true);
-	const time = f.time('time', TIME_MESSAGE);
-	const split = f.time('split', 'Enter a split like 1:45.0 or 1450.');
+	let description = f.note('description', 80, 'Keep the description under 80 characters.');
 	const avg_rate = f.whole('avg_rate', 10, 60, RATE_MESSAGE);
 	const avg_heart_rate = f.whole('avg_heart_rate', 40, 230, 'Heart rate must be between 40 and 230.');
 	const machine = f.choice('machine', ERG_MACHINES, 'Pick Concept2 or RP3.');
 	const notes = f.note('notes', 1000, 'Keep the notes under 1000 characters.');
 	const is_test = f.text('is_test') === 'on';
+
+	// Intervals entered piece by piece: the totals come from the pieces.
+	const byPiece = session_type === 'intervals' && f.text('piece_count') !== '';
+	if (byPiece) {
+		const count = f.whole('piece_count', MIN_PIECES, MAX_PIECES, `Enter ${MIN_PIECES} to ${MAX_PIECES} pieces.`, true);
+		const pieces = count === null ? [] : readPieces(f, count);
+		const complete = count !== null && pieces.length === count;
+		if (complete && !description) description = describePieces(pieces);
+		return f.result({
+			session: {
+				session_date,
+				session_type,
+				description,
+				distance_m: pieces.reduce((sum, p) => sum + p.distance_m, 0),
+				duration_ds: pieces.reduce((sum, p) => sum + p.duration_ds, 0),
+				avg_rate,
+				avg_heart_rate,
+				machine,
+				is_test,
+				notes,
+			},
+			pieces,
+		});
+	}
+
+	const distance_m = f.whole('distance_m', 100, 100000, DISTANCE_MESSAGE, true);
+	const time = f.time('time', TIME_MESSAGE);
+	const split = f.time('split', 'Enter a split like 1:45.0 or 1450.');
 
 	if (session_type === 'intervals' && !description) {
 		f.errors.description = 'Describe the intervals, e.g. 4x2k r5\'.';
@@ -152,20 +237,23 @@ export function validateErgSession(form: FormData, today = todayInIreland()): Fo
 	}
 
 	if (duration_ds !== null && distance_m !== null && !splitIsPlausible(distance_m, duration_ds)) {
-		f.errors.time = 'That works out at a split outside 1:00.0 to 10:00.0 per 500 m. Check the time and distance.';
+		f.errors.time = SPLIT_MESSAGE;
 	}
 
 	return f.result({
-		session_date,
-		session_type,
-		description,
-		distance_m: distance_m ?? 0,
-		duration_ds: duration_ds ?? 0,
-		avg_rate,
-		avg_heart_rate,
-		machine,
-		is_test,
-		notes,
+		session: {
+			session_date,
+			session_type,
+			description,
+			distance_m: distance_m ?? 0,
+			duration_ds: duration_ds ?? 0,
+			avg_rate,
+			avg_heart_rate,
+			machine,
+			is_test,
+			notes,
+		},
+		pieces: [],
 	});
 }
 
@@ -185,9 +273,16 @@ export function validateOnWaterOuting(form: FormData, today = todayInIreland()):
 
 const text = (value: string | number | null) => (value === null ? '' : String(value));
 
-/** A saved erg session as form values, for the edit page. The opposite of validateErgSession. */
-export function ergSessionValues(row: ErgSessionRow): Record<string, string> {
+/** A saved erg session (and its pieces) as form values, for the edit page. The opposite of validateErgSession. */
+export function ergSessionValues(row: ErgSessionRow, pieces: ErgPiece[] = []): Record<string, string> {
+	const pieceValues: Record<string, string> = pieces.length > 0 ? { piece_count: String(pieces.length) } : {};
+	pieces.forEach((piece, i) => {
+		pieceValues[`piece_${i + 1}_distance`] = text(piece.distance_m);
+		pieceValues[`piece_${i + 1}_time`] = formatTime(piece.duration_ds);
+		pieceValues[`piece_${i + 1}_rate`] = text(piece.avg_rate);
+	});
 	return {
+		...pieceValues,
 		session_date: row.session_date,
 		session_type: row.session_type,
 		description: text(row.description),

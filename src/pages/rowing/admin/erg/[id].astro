@@ -1,6 +1,7 @@
 ---
 // Edit or delete one erg session. ?delete shows a confirmation step first; the form there posts
-// intent=delete. Changes are made as the logged-in user, so row level security has the final say.
+// intent=delete. Changes are made as the logged-in user, so row level security has the final say;
+// saving goes through save_erg_session(), which replaces any interval pieces in the same transaction.
 export const prerender = false;
 import AdminNotice from '../../../../components/rowing/AdminNotice.astro';
 import ErgSessionForm from '../../../../components/rowing/ErgSessionForm.astro';
@@ -41,14 +42,20 @@ if (admin.access === 'allow' && admin.supabase) {
 			}
 		} else {
 			values = formValues(form);
-			const result = validateErgSession(form);
-			if (!result.ok) {
+			// "Show pieces" (only there without JavaScript) just shows the form again with that many piece rows.
+			const result = form.get('intent') === 'set-pieces' ? null : validateErgSession(form);
+			if (result && !result.ok) {
 				Astro.response.status = 422;
 				errors = result.errors;
-			} else {
-				const { data, error } = await sessions().update(result.row).eq('id', id).select('id');
-				if (!error && data.length > 0) return Astro.redirect('/rowing/admin?saved=erg', 303);
-				if (!error) notFound = true;
+			} else if (result) {
+				const { error } = await admin.supabase.rpc('save_erg_session', {
+					p_id: id,
+					p_session: result.row.session,
+					p_pieces: result.row.pieces,
+				});
+				if (!error) return Astro.redirect('/rowing/admin?saved=erg', 303);
+				// P0002: the session doesn't exist (any more).
+				if (error.code === 'P0002') notFound = true;
 				else {
 					const failure = saveFailure(error);
 					Astro.response.status = failure.status;
@@ -60,7 +67,11 @@ if (admin.access === 'allow' && admin.supabase) {
 
 	// Load the session to fill the form or describe it on the confirmation step.
 	if (!notFound && (Astro.request.method !== 'POST' || confirmingDelete)) {
-		const { data, error } = await sessions().select('*').eq('id', id).maybeSingle();
+		const { data, error } = await sessions()
+			.select('*, erg_intervals(distance_m, duration_ds, avg_rate, piece_no)')
+			.eq('id', id)
+			.order('piece_no', { referencedTable: 'erg_intervals' })
+			.maybeSingle();
 		if (error) {
 			Astro.response.status = 503;
 			formError = "Couldn't load this session right now.";
@@ -68,7 +79,7 @@ if (admin.access === 'allow' && admin.supabase) {
 			notFound = true;
 		} else {
 			saved = data;
-			if (Astro.request.method !== 'POST') values = ergSessionValues(data);
+			if (Astro.request.method !== 'POST') values = ergSessionValues(data, data.erg_intervals);
 		}
 	}
 

@@ -1,8 +1,10 @@
 ---
-// The erg session form, used for adding and (later) editing. The server checks everything
-// (src/lib/rowing-forms.ts); the small script only previews the split while typing.
+// The erg session form, used for adding and editing. The server checks everything
+// (src/lib/rowing-forms.ts); the script only shows and hides parts of the form and previews splits.
+// Intervals can be entered piece by piece: the form always has MAX_PIECES rows, and only the first
+// "number of pieces" are shown and sent. Without JavaScript, "Show pieces" reloads the form with them.
 import '../../styles/rowing-admin.css';
-import { todayInIreland } from '../../lib/rowing-forms';
+import { MAX_PIECES, MIN_PIECES, todayInIreland } from '../../lib/rowing-forms';
 import Field from './Field.astro';
 
 interface Props {
@@ -17,6 +19,15 @@ const { values, errors, formError, submitLabel } = Astro.props;
 const hasErrors = Object.keys(errors).length > 0;
 const invalid = (name: string) => (errors[name] ? 'true' : undefined);
 const describedBy = (name: string) => (errors[name] ? `${name}-error` : undefined);
+
+const isIntervals = values.session_type === 'intervals';
+const count = Number(values.piece_count);
+const shownPieces = isIntervals && Number.isInteger(count) && count >= MIN_PIECES && count <= MAX_PIECES ? count : 0;
+// With a number of pieces, the totals come from the pieces, so the total boxes are hidden.
+const byPiece = isIntervals && (values.piece_count ?? '').trim() !== '';
+const pieceNumbers = Array.from({ length: MAX_PIECES }, (_, i) => i + 1);
+const pieceErrors = (n: number) =>
+	['distance', 'time', 'rate'].map((part) => [`piece_${n}_${part}`, errors[`piece_${n}_${part}`]]).filter(([, e]) => e);
 ---
 
 <form class="panel admin-form" method="post" data-erg-form data-testid="erg-form" novalidate>
@@ -41,11 +52,11 @@ const describedBy = (name: string) => (errors[name] ? `${name}-error` : undefine
 	<fieldset aria-describedby={describedBy('session_type')}>
 		<legend>Type</legend>
 		<label class="choice">
-			<input type="radio" name="session_type" value="single" checked={values.session_type !== 'intervals'} />
+			<input type="radio" name="session_type" value="single" checked={!isIntervals} />
 			Single piece
 		</label>
 		<label class="choice">
-			<input type="radio" name="session_type" value="intervals" checked={values.session_type === 'intervals'} />
+			<input type="radio" name="session_type" value="intervals" checked={isIntervals} />
 			Intervals
 		</label>
 		{errors.session_type && <p class="field-error" id="session_type-error">{errors.session_type}</p>}
@@ -55,38 +66,95 @@ const describedBy = (name: string) => (errors[name] ? `${name}-error` : undefine
 		name="description"
 		class="wide"
 		label="Description"
-		hint="Needed for intervals, e.g. 4x2k r5'"
+		hint="e.g. 5x1k r3'. Left empty for pieces, it's filled in for you"
 		maxlength={80}
 		value={values.description}
 		error={errors.description}
 	/>
 
-	<Field
-		name="distance_m"
-		label="Distance (m)"
-		hint="e.g. 2000"
-		inputmode="numeric"
-		required
-		value={values.distance_m}
-		error={errors.distance_m}
-	/>
-	<Field
-		name="time"
-		label="Time"
-		hint="6:12.0, 1:02:30.5 or 6120"
-		autocomplete="off"
-		value={values.time}
-		error={errors.time}
-	/>
-	<Field
-		name="split"
-		label="Or split /500m"
-		hint="Single pieces only, e.g. 1:45.0"
-		autocomplete="off"
-		value={values.split}
-		error={errors.split}
-	/>
-	<p class="preview wide" aria-live="polite" data-split-preview></p>
+	<div class="intervals wide" data-intervals hidden={!isIntervals}>
+		<div class="piece-count">
+			<Field
+				name="piece_count"
+				label="Number of pieces"
+				hint={`${MIN_PIECES} to ${MAX_PIECES}, or leave empty to enter just the total`}
+				inputmode="numeric"
+				autocomplete="off"
+				value={values.piece_count}
+				error={errors.piece_count}
+			/>
+			<button class="button" type="submit" name="intent" value="set-pieces" data-set-pieces>Show pieces</button>
+		</div>
+
+		<div class="pieces" data-pieces hidden={shownPieces === 0}>
+			<div class="piece-row piece-head" aria-hidden="true">
+				<span>#</span><span>Distance (m)</span><span>Time</span><span>Rate</span><span>Split</span>
+			</div>
+			{
+				pieceNumbers.map((n) => (
+					<fieldset class="piece" data-piece={n} hidden={n > shownPieces} disabled={n > shownPieces}>
+						<legend class="sr-only">Piece {n}</legend>
+						<div class="piece-row">
+							<span class="piece-no" aria-hidden="true">
+								{n}
+							</span>
+							{['distance', 'time', 'rate'].map((part) => {
+								const name = `piece_${n}_${part}`;
+								return (
+									<input
+										name={name}
+										aria-label={`Piece ${n} ${part}`}
+										inputmode={part === 'time' ? undefined : 'numeric'}
+										autocomplete="off"
+										placeholder={part === 'time' ? '3:10.0' : undefined}
+										value={values[name]}
+										aria-invalid={invalid(name)}
+										aria-describedby={describedBy(name)}
+										data-part={part}
+									/>
+								);
+							})}
+							<span class="piece-split" data-piece-split />
+						</div>
+						{pieceErrors(n).map(([name, error]) => (
+							<p class="field-error" id={`${name}-error`}>
+								Piece {n}: {error}
+							</p>
+						))}
+					</fieldset>
+				))
+			}
+			<p class="preview" aria-live="polite" data-pieces-total></p>
+		</div>
+	</div>
+
+	<div class="totals" data-totals hidden={byPiece}>
+		<Field
+			name="distance_m"
+			label="Distance (m)"
+			hint="e.g. 2000"
+			inputmode="numeric"
+			value={values.distance_m}
+			error={errors.distance_m}
+		/>
+		<Field
+			name="time"
+			label="Time"
+			hint="6:12.0, 1:02:30.5 or 6120"
+			autocomplete="off"
+			value={values.time}
+			error={errors.time}
+		/>
+		<Field
+			name="split"
+			label="Or split /500m"
+			hint="Single pieces only, e.g. 1:45.0"
+			autocomplete="off"
+			value={values.split}
+			error={errors.split}
+		/>
+		<p class="preview wide" aria-live="polite" data-split-preview></p>
+	</div>
 
 	<Field
 		name="avg_rate"
@@ -137,35 +205,83 @@ const describedBy = (name: string) => (errors[name] ? `${name}-error` : undefine
 </form>
 
 <script>
+	import { formatDistance } from '../../lib/rowing-format';
+	import { MAX_PIECES, MIN_PIECES } from '../../lib/rowing-forms';
 	import { durationFromSplit, formatTime, parseTime, splitFor } from '../../lib/rowing-time';
 
-	// Shows the split (or the total time, when a split is typed) before saving.
-	function initSplitPreview() {
+	const metres = (text: string) => (/^\d+$/.test(text.trim()) && Number(text) >= 100 ? Number(text) : null);
+
+	function initErgForm() {
 		const form = document.querySelector<HTMLFormElement>('[data-erg-form]');
-		const preview = form?.querySelector<HTMLElement>('[data-split-preview]');
-		if (!form || !preview || form.dataset.previewReady) return;
-		form.dataset.previewReady = 'true';
+		if (!form || form.dataset.ready) return;
+		form.dataset.ready = 'true';
+
+		const $ = <T extends Element>(selector: string) => form.querySelector<T>(selector)!;
+		const intervals = $<HTMLElement>('[data-intervals]');
+		const totals = $<HTMLElement>('[data-totals]');
+		const piecesBox = $<HTMLElement>('[data-pieces]');
+		const piecesTotal = $<HTMLElement>('[data-pieces-total]');
+		const splitPreview = $<HTMLElement>('[data-split-preview]');
+		const countInput = $<HTMLInputElement>('[name="piece_count"]');
+		const rows = [...form.querySelectorAll<HTMLFieldSetElement>('[data-piece]')];
+		// With JavaScript the rows appear as the number is typed, so the reload button isn't needed.
+		// Removed rather than hidden: Enter in a box clicks the first submit button, and that must be Save.
+		$<HTMLElement>('[data-set-pieces]').remove();
 
 		const update = () => {
 			const data = new FormData(form);
-			const distance = Number(data.get('distance_m'));
+			const isIntervals = data.get('session_type') === 'intervals';
+			const countText = countInput.value.trim();
+			const count = Number(countText);
+			const shown = isIntervals && Number.isInteger(count) && count >= MIN_PIECES && count <= MAX_PIECES ? count : 0;
+
+			intervals.hidden = !isIntervals;
+			totals.hidden = isIntervals && countText !== '';
+			piecesBox.hidden = shown === 0;
+
+			// Each shown piece: copy the distance down (as a grey placeholder), show its split, add up the totals.
+			let previous: number | null = null;
+			let totalDistance = 0;
+			let totalTime = 0;
+			let complete = shown > 0;
+			rows.forEach((row, i) => {
+				const on = i < shown;
+				row.hidden = !on;
+				row.disabled = !on;
+				if (!on) return;
+				const distanceInput = row.querySelector<HTMLInputElement>('[data-part="distance"]')!;
+				const typed = metres(distanceInput.value);
+				distanceInput.placeholder = previous === null ? '' : String(previous);
+				const distance = distanceInput.value.trim() === '' ? previous : typed;
+				if (typed !== null) previous = typed;
+				const time = parseTime(row.querySelector<HTMLInputElement>('[data-part="time"]')!.value);
+				row.querySelector<HTMLElement>('[data-piece-split]')!.textContent =
+					distance !== null && time !== null ? formatTime(splitFor(distance, time)) : '';
+				if (distance !== null && time !== null) {
+					totalDistance += distance;
+					totalTime += time;
+				} else {
+					complete = false;
+				}
+			});
+			piecesTotal.textContent = complete
+				? `Total: ${formatDistance(totalDistance)} in ${formatTime(totalTime)}, average split ${formatTime(splitFor(totalDistance, totalTime))} /500m`
+				: '';
+
+			// A single piece (or intervals entered as a total): split from the time, or time from the split.
+			const distance = metres(String(data.get('distance_m') ?? ''));
 			const time = parseTime(String(data.get('time') ?? ''));
 			const split = parseTime(String(data.get('split') ?? ''));
-			if (!Number.isInteger(distance) || distance < 100) {
-				preview.textContent = '';
-			} else if (time !== null) {
-				preview.textContent = `Split: ${formatTime(splitFor(distance, time))} /500m`;
-			} else if (split !== null) {
-				preview.textContent = `Total time: ${formatTime(durationFromSplit(distance, split))}`;
-			} else {
-				preview.textContent = '';
-			}
+			if (totals.hidden || distance === null) splitPreview.textContent = '';
+			else if (time !== null) splitPreview.textContent = `Split: ${formatTime(splitFor(distance, time))} /500m`;
+			else if (split !== null) splitPreview.textContent = `Total time: ${formatTime(durationFromSplit(distance, split))}`;
+			else splitPreview.textContent = '';
 		};
 		form.addEventListener('input', update);
 		update();
 	}
 
 	// Inline scripts run after the first astro:page-load, so start now as well as on later navigations.
-	initSplitPreview();
-	document.addEventListener('astro:page-load', initSplitPreview);
+	initErgForm();
+	document.addEventListener('astro:page-load', initErgForm);
 </script>
