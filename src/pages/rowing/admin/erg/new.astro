@@ -1,6 +1,7 @@
 ---
 // Add an erg session. The form posts back here; it's checked on the server, then saved as the logged-in
-// user, so the database's row level security has the final say on who can write.
+// user through save_erg_session(), which stores the session and any interval pieces together, so the
+// database's row level security has the final say on who can write.
 export const prerender = false;
 import AdminNotice from '../../../../components/rowing/AdminNotice.astro';
 import ErgSessionForm from '../../../../components/rowing/ErgSessionForm.astro';
@@ -18,12 +19,17 @@ let formError: string | null = null;
 if (admin.access === 'allow' && admin.supabase && Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
 	values = formValues(form);
-	const result = validateErgSession(form);
-	if (!result.ok) {
+	// "Show pieces" (only there without JavaScript) just shows the form again with that many piece rows.
+	const result = form.get('intent') === 'set-pieces' ? null : validateErgSession(form);
+	if (result && !result.ok) {
 		Astro.response.status = 422;
 		errors = result.errors;
-	} else {
-		const { error } = await admin.supabase.from('erg_sessions').insert(result.row.session);
+	} else if (result) {
+		const { error } = await admin.supabase.rpc('save_erg_session', {
+			p_id: null,
+			p_session: result.row.session,
+			p_pieces: result.row.pieces,
+		});
 		if (!error) return Astro.redirect('/rowing/admin?saved=erg', 303);
 		const failure = saveFailure(error);
 		Astro.response.status = failure.status;
