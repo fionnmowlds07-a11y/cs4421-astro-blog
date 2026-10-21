@@ -1,36 +1,307 @@
 ---
-// Placeholder shell; becomes server-rendered once sessions are stored in the database.
-export const prerender = true;
-import BaseHead from '../../components/BaseHead.astro';
-import Footer from '../../components/Footer.astro';
-import Header from '../../components/Header.astro';
+// The public Rowing page: my PBs, latest erg sessions and on-water outings, read from Supabase with the
+// public read-only client. Server-rendered, but the same for every visitor, so shared caches may keep it
+// for a few minutes; the Log in / Admin button is a server island, worked out per visitor separately.
+// If the database can't be reached the page still loads, with a friendly message instead of the log.
+export const prerender = false;
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from 'astro:env/server';
 import AdminLink from '../../components/rowing/AdminLink.astro';
 import AdminLinkButton from '../../components/rowing/AdminLinkButton.astro';
-import { SITE_TITLE } from '../../consts';
+import SplitChart from '../../components/rowing/SplitChart.astro';
+import RowingLayout from '../../layouts/RowingLayout.astro';
+import { loadRowingPage, rowingCacheControl } from '../../lib/rowing-data';
+import { formatDate, formatDistance, MACHINE_NAMES } from '../../lib/rowing-format';
+import { formatTime } from '../../lib/rowing-time';
+import { getSupabase } from '../../lib/supabase';
+
+const data = await loadRowingPage(getSupabase({ url: SUPABASE_URL, publishableKey: SUPABASE_PUBLISHABLE_KEY }));
+Astro.response.headers.set('Cache-Control', rowingCacheControl(data.status));
+
+const time = (ds: number | null) => (ds === null ? null : formatTime(ds));
+const split = (ds: number | null) => (ds === null ? null : `${formatTime(ds)} /500m`);
+/** The bits of a session or outing worth showing, joined with dots, skipping the ones that are empty. */
+const facts = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ');
 ---
 
-<!doctype html>
-<html lang="en" data-theme="rowing">
-	<head>
-		<BaseHead title={`Rowing | ${SITE_TITLE}`} description="My rowing training log: sessions, distances and splits." />
-	</head>
-	<body>
-		<Header />
-		<main>
-			<h1>Rowing</h1>
-			<span class="stripe" aria-hidden="true"></span>
-			<p>My rowing training log, with sessions, distances and splits, is coming soon.</p>
-			<p class="owner">
-				<AdminLink server:defer>
-					<AdminLinkButton slot="fallback" loggedIn={false} />
-				</AdminLink>
+<RowingLayout title="Rowing" description="My rowing training log: personal bests, erg sessions and on-water outings.">
+	<p class="intro">My rowing training log: personal bests on the erg, and my latest sessions on the erg and on the water.</p>
+
+	{
+		data.status === 'unavailable' ? (
+			<p class="panel notice" data-testid="rowing-unavailable">
+				My training log can't be loaded right now. Please try again in a few minutes.
 			</p>
-		</main>
-		<Footer />
-	</body>
-</html>
+		) : (
+			<>
+				<section aria-labelledby="pbs-heading" data-testid="rowing-pbs">
+					<h2 id="pbs-heading">Personal bests</h2>
+					{data.personalBests.length === 0 ? (
+						<p class="empty">No test pieces logged yet.</p>
+					) : (
+						data.personalBests.map((group) => (
+							<>
+								<h3>{MACHINE_NAMES[group.machine]}</h3>
+								<ul class="pb-tiles">
+									{group.bests.map((pb) => (
+										<li class="pb-tile" data-testid="pb-tile">
+											<span class="pb-label">{pb.label}</span>
+											<span class="pb-value">{formatTime(pb.duration_ds)}</span>
+											<span class="pb-detail">
+												{split(pb.avg_split_ds)}
+												<br />
+												<time datetime={pb.session_date}>{formatDate(pb.session_date)}</time>
+											</span>
+										</li>
+									))}
+								</ul>
+							</>
+						))
+					)}
+				</section>
+
+				<section aria-labelledby="chart-heading" data-testid="split-chart">
+					<h2 id="chart-heading">My 2k split over time</h2>
+					{data.twoK.length === 0 ? (
+						<p class="empty">No 2k pieces logged yet.</p>
+					) : (
+						<div class="panel chart-panel">
+							<SplitChart class="wide" points={data.twoK} width={680} height={260} />
+							<SplitChart class="narrow" points={data.twoK} width={320} height={220} />
+						</div>
+					)}
+				</section>
+
+				<section aria-labelledby="erg-heading" data-testid="recent-sessions">
+					<h2 id="erg-heading">Latest erg sessions</h2>
+					{data.sessions.length === 0 ? (
+						<p class="empty">No erg sessions logged yet.</p>
+					) : (
+						<ul class="log">
+							{data.sessions.map((s) => (
+								<li class="log-item">
+									<time class="log-date" datetime={s.session_date}>
+										{formatDate(s.session_date)}
+									</time>
+									<p class="log-title">
+										{s.description ?? formatDistance(s.distance_m)}
+										{s.is_test && <span class="tag">Test</span>}
+									</p>
+									<p class="log-facts">
+										{facts(
+											// Without a description the title already is the distance.
+											s.description ? formatDistance(s.distance_m) : null,
+											time(s.duration_ds),
+											split(s.avg_split_ds),
+											s.avg_rate === null ? null : `${s.avg_rate} spm`,
+											MACHINE_NAMES[s.machine],
+										)}
+									</p>
+									{s.erg_intervals.length > 0 && (
+										<details class="pieces">
+											<summary>Show {s.erg_intervals.length} pieces</summary>
+											<table>
+												<caption class="sr-only">Pieces of the session on {formatDate(s.session_date)}</caption>
+												<thead>
+													<tr>
+														<th scope="col">#</th>
+														<th scope="col">Distance</th>
+														<th scope="col">Time</th>
+														<th scope="col">Split</th>
+														<th scope="col">Rate</th>
+													</tr>
+												</thead>
+												<tbody>
+													{s.erg_intervals.map((p) => (
+														<tr>
+															<td>{p.piece_no}</td>
+															<td>{formatDistance(p.distance_m)}</td>
+															<td>{formatTime(p.duration_ds)}</td>
+															<td>{formatTime(p.avg_split_ds)}</td>
+															<td>{p.avg_rate ?? '–'}</td>
+														</tr>
+													))}
+												</tbody>
+											</table>
+										</details>
+									)}
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+
+				<section aria-labelledby="water-heading" data-testid="recent-outings">
+					<h2 id="water-heading">Latest on-water outings</h2>
+					{data.outings.length === 0 ? (
+						<p class="empty">No outings logged yet.</p>
+					) : (
+						<ul class="log">
+							{data.outings.map((o) => (
+								<li class="log-item">
+									<time class="log-date" datetime={o.outing_date}>
+										{formatDate(o.outing_date)}
+									</time>
+									<p class="log-title">
+										{o.boat}
+										{o.crew && ` · ${o.crew}`}
+									</p>
+									<p class="log-facts">
+										{facts(formatDistance(o.distance_m), time(o.duration_ds), split(o.avg_split_ds), o.conditions)}
+									</p>
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+			</>
+		)
+	}
+
+	<p class="owner">
+		<AdminLink server:defer>
+			<AdminLinkButton slot="fallback" loggedIn={false} />
+		</AdminLink>
+	</p>
+</RowingLayout>
 
 <style>
+	.intro {
+		margin-top: 0;
+	}
+	h2 {
+		margin: 2.25rem 0 0.75rem;
+		font-size: 1.4em;
+	}
+	h3 {
+		margin: 1rem 0 0.5rem;
+		font-size: 0.95em;
+		color: rgb(var(--gray-dark));
+	}
+	.panel,
+	.pb-tile,
+	.log-item {
+		border-radius: 14px;
+		background: var(--surface);
+		box-shadow: 0 1px 3px rgba(var(--black), 8%);
+	}
+	.notice {
+		padding: 1rem 1.25rem;
+	}
+	/* One chart drawn for wide screens and one for phones, so the text in the SVG stays readable. */
+	.chart-panel {
+		padding: 1rem 1.25rem;
+	}
+	.chart-panel :global(.narrow) {
+		display: none;
+	}
+	@media (max-width: 560px) {
+		.chart-panel {
+			padding: 0.9rem 0.75rem;
+		}
+		.chart-panel :global(.wide) {
+			display: none;
+		}
+		.chart-panel :global(.narrow) {
+			display: block;
+		}
+	}
+	.empty {
+		color: rgb(var(--gray));
+	}
+
+	/* Personal bests: one tile per distance. */
+	.pb-tiles {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+		gap: 0.75rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.pb-tile {
+		display: grid;
+		gap: 0.15rem;
+		padding: 0.9rem 1rem;
+		border-top: 3px solid var(--accent);
+	}
+	.pb-label {
+		font-size: 0.8em;
+		font-weight: 700;
+		color: rgb(var(--gray));
+	}
+	.pb-value {
+		font-size: 1.6rem;
+		font-weight: 700;
+		line-height: 1.2;
+		color: rgb(var(--black));
+	}
+	.pb-detail {
+		font-size: 0.75em;
+		line-height: 1.5;
+		color: rgb(var(--gray));
+	}
+
+	/* Latest sessions and outings: cards rather than a table, so phones never scroll sideways. */
+	.log {
+		display: grid;
+		gap: 0.6rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.log-item {
+		padding: 0.8rem 1rem;
+	}
+	.log-date {
+		font-size: 0.75em;
+		font-weight: 700;
+		color: rgb(var(--gray));
+	}
+	.log-title {
+		margin: 0.1rem 0 0;
+		font-weight: 700;
+	}
+	.log-facts {
+		margin: 0.15rem 0 0;
+		font-size: 0.85em;
+		color: rgb(var(--gray-dark));
+	}
+	.tag {
+		margin-left: 0.4rem;
+		padding: 0.1rem 0.4rem;
+		border-radius: 6px;
+		font-size: 0.7em;
+		font-weight: 700;
+		vertical-align: middle;
+		background: var(--accent);
+		color: #ffffff;
+	}
+	.pieces {
+		margin-top: 0.5rem;
+		font-size: 0.85em;
+	}
+	.pieces summary {
+		cursor: pointer;
+		font-weight: 700;
+		color: var(--accent);
+	}
+	.pieces table {
+		margin-top: 0.4rem;
+		border-collapse: collapse;
+		font-variant-numeric: tabular-nums;
+	}
+	.pieces th,
+	.pieces td {
+		padding: 0.25rem 0.9rem 0.25rem 0;
+		text-align: left;
+		white-space: nowrap;
+	}
+	.pieces th {
+		font-size: 0.85em;
+		text-transform: uppercase;
+		color: rgb(var(--gray));
+	}
+
 	.owner {
 		margin-top: 3rem;
 	}
