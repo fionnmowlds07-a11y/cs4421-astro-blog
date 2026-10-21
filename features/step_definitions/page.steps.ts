@@ -107,6 +107,10 @@ Then('the page should ask search engines not to list it', function (this: ApiWor
 	assert.match(html(this), /<meta name="robots" content="noindex/);
 });
 
+Then('the page should let search engines list it', function (this: ApiWorld) {
+	assert.doesNotMatch(html(this), /<meta name="robots" content="noindex/);
+});
+
 Then('I should be permanently redirected to {string}', function (this: ApiWorld, path: string) {
 	assert.equal(this.response?.status, 301);
 	const location = this.response?.headers.get('location') ?? '';
