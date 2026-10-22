@@ -77,3 +77,9 @@ test('deployment invalidates the whole CloudFront cache', () => {
     DistributionPaths: ['/*'],
   });
 });
+
+test('stack outputs the HTTPS address of the site', () => {
+  template.hasOutput('SiteUrl', {
+    Value: { 'Fn::Join': ['', ['https://', { 'Fn::GetAtt': [Match.stringLikeRegexp('SiteDistribution'), 'DomainName'] }]] },
+  });
+});

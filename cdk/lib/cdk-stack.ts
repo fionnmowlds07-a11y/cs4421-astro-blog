@@ -59,5 +59,11 @@ function handler(event) {
       distribution,
       distributionPaths: ['/*'], // Automatic CloudFront CDN cache invalidation!
     });
+
+    // Printed at the end of `cdk deploy` (and saved by the workflow), so the site's address is easy to find.
+    new cdk.CfnOutput(this, 'SiteUrl', {
+      description: 'Public HTTPS address of the static site',
+      value: `https://${distribution.distributionDomainName}`,
+    });
   }
 }

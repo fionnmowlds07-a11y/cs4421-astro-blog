@@ -4,6 +4,9 @@ import { StaticSiteStack } from '../lib/cdk-stack';
 
 const app = new cdk.App();
 new StaticSiteStack(app, 'StaticSiteStack', {
+  // The built static site to upload. The deploy workflow builds a static release (e.g. the v1.0.0 tag)
+  // in its own folder and points STATIC_SITE_DIR at it; otherwise it's this repo's ../dist.
+  siteAssetPath: process.env.STATIC_SITE_DIR,
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */
