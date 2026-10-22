@@ -135,6 +135,10 @@ a:hover {
 	outline-offset: 3px;
 	border-radius: 2px;
 }
+/* The header is black, so a dark page accent would be invisible there; use the header's bright accent instead. */
+header :focus-visible {
+	outline-color: var(--header-accent);
+}
 p {
 	margin-bottom: 1em;
 }
