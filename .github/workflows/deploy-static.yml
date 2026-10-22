@@ -1,35 +1,76 @@
 name: Deploy Static Site via AWS CDK
-# Manual-only: the SSR build output is incompatible with this S3 deploy (see ADR-001).
-# Re-enable or replace once the container deploy exists.
+# Deploys a static release of the site (the v1.x tags, from before the move to SSR in ADR-001) to S3 behind
+# CloudFront, so it can be compared with the containerised SSR version. Manual only.
+# Logs in to AWS with OIDC: no AWS keys are stored in GitHub. The role only trusts runs on main.
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag or branch of the static site to deploy'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: read
+  id-token: write # lets the job ask GitHub for the signed token it swaps for temporary AWS credentials
+
+concurrency:
+  group: deploy-static
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code
+      # The CDK code comes from main; the site itself comes from the chosen static release.
+      - name: Checkout Source Code (CDK)
         uses: actions/checkout@v7
+
+      - name: Checkout Static Release ${{ inputs.ref }}
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          path: static-site
+
       - name: Setup Node.js Runtime
         uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: |
-            package-lock.json
+            static-site/package-lock.json
             cdk/package-lock.json
-      - name: Install Project Dependencies
-        run: npm ci
+
+      - name: Build Static Site
+        working-directory: static-site
+        run: |
+          npm ci
+          npm run build
+
+      # S3 can only serve plain files, so refuse an SSR build (it has a dist/server folder).
+      - name: Check the Build Is Static
+        run: |
+          test -f static-site/dist/index.html || { echo "No dist/index.html: not a static build"; exit 1; }
+          test ! -d static-site/dist/server || { echo "dist/server exists: this is an SSR build, not static"; exit 1; }
+
       - name: Install CDK Dependencies
         working-directory: cdk
         run: npm ci
-      - name: Build Astro Static Site
-        run: npm run build
-      - name: Configure AWS Credentials
+
+      - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       - name: Deploy Infrastructure & Assets with AWS CDK
         working-directory: cdk
-        run: npx cdk deploy --require-approval never
+        env:
+          STATIC_SITE_DIR: ${{ github.workspace }}/static-site/dist
+        run: npx cdk deploy StaticSiteStack --require-approval never --outputs-file outputs.json
+
+      - name: Show the Site URL
+        run: |
+          url=$(jq -r '.StaticSiteStack.SiteUrl' cdk/outputs.json)
+          echo "Static site (${{ inputs.ref }}): $url"
+          echo "### Static site (${{ inputs.ref }}) deployed: $url" >> "$GITHUB_STEP_SUMMARY"
