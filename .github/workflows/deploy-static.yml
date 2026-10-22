@@ -41,8 +41,13 @@ jobs:
             static-site/package-lock.json
             cdk/package-lock.json
 
+      # Build it outside this repo's folder: otherwise Astro also finds main's tsconfig.json in the folder
+      # above and fails, because main's node_modules isn't installed here ("Tsconfig not found").
+      - name: Move the Static Release out of the Repo Folder
+        run: mv static-site "$RUNNER_TEMP/static-site"
+
       - name: Build Static Site
-        working-directory: static-site
+        working-directory: ${{ runner.temp }}/static-site
         run: |
           npm ci
           npm run build
@@ -50,8 +55,8 @@ jobs:
       # S3 can only serve plain files, so refuse an SSR build (it has a dist/server folder).
       - name: Check the Build Is Static
         run: |
-          test -f static-site/dist/index.html || { echo "No dist/index.html: not a static build"; exit 1; }
-          test ! -d static-site/dist/server || { echo "dist/server exists: this is an SSR build, not static"; exit 1; }
+          test -f "$RUNNER_TEMP/static-site/dist/index.html" || { echo "No dist/index.html: not a static build"; exit 1; }
+          test ! -d "$RUNNER_TEMP/static-site/dist/server" || { echo "dist/server exists: this is an SSR build, not static"; exit 1; }
 
       - name: Install CDK Dependencies
         working-directory: cdk
@@ -66,7 +71,7 @@ jobs:
       - name: Deploy Infrastructure & Assets with AWS CDK
         working-directory: cdk
         env:
-          STATIC_SITE_DIR: ${{ github.workspace }}/static-site/dist
+          STATIC_SITE_DIR: ${{ runner.temp }}/static-site/dist
         run: npx cdk deploy StaticSiteStack --require-approval never --outputs-file outputs.json
 
       - name: Show the Site URL
