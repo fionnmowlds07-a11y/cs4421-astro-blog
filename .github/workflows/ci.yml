@@ -52,6 +52,25 @@ jobs:
         env:
           BASE_URL: http://localhost:4321
 
+      # Real-browser tests (desktop and mobile) against the same container, so they also check what ships.
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright end-to-end tests
+        run: npm run test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:4321
+
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
       - name: Show container logs
         if: failure()
         run: docker logs astro-blog
