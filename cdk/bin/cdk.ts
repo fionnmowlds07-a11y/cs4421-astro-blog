@@ -2,6 +2,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { StaticSiteStack } from '../lib/cdk-stack';
 import { ImagesStack } from '../lib/images-stack';
+import { SsrStack } from '../lib/ssr-stack';
 
 const app = new cdk.App();
 new StaticSiteStack(app, 'StaticSiteStack', {
@@ -26,4 +27,10 @@ new StaticSiteStack(app, 'StaticSiteStack', {
 // The SSR site's Docker images (ECR). Created and deleted together with the SSR environment by infra-up/infra-down.
 new ImagesStack(app, 'AstroBlogImages', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' },
+});
+
+// The containerised SSR site. infra-up passes the image to run with `-c imageTag=<commit ID or vX.Y.Z>`.
+new SsrStack(app, 'AstroBlogSsr', {
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' },
+  imageTag: app.node.tryGetContext('imageTag') ?? 'latest',
 });
