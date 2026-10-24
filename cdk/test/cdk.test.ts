@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { StaticSiteStack } from '../lib/cdk-stack';
+import { appWithDomain, TEST_ENV } from './test-domain';
 
 let template: Template;
 let siteDir: string;
@@ -13,8 +13,13 @@ beforeAll(() => {
   siteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'site-'));
   fs.writeFileSync(path.join(siteDir, 'index.html'), '<h1>test</h1>');
 
-  const app = new cdk.App();
-  const stack = new StaticSiteStack(app, 'TestStack', { siteAssetPath: siteDir });
+  const { app, domain } = appWithDomain();
+  const stack = new StaticSiteStack(app, 'TestStack', {
+    env: TEST_ENV,
+    siteAssetPath: siteDir,
+    zone: domain.zone,
+    certificate: domain.certificate,
+  });
   template = Template.fromStack(stack);
 });
 
@@ -78,8 +83,25 @@ test('deployment invalidates the whole CloudFront cache', () => {
   });
 });
 
-test('stack outputs the HTTPS address of the site', () => {
-  template.hasOutput('SiteUrl', {
+test('the site answers on static.fionnmowlds.online with my certificate', () => {
+  template.hasResourceProperties('AWS::CloudFront::Distribution', {
+    DistributionConfig: Match.objectLike({
+      Aliases: ['static.fionnmowlds.online'],
+      ViewerCertificate: Match.objectLike({ SslSupportMethod: 'sni-only' }),
+    }),
+  });
+  for (const type of ['A', 'AAAA']) {
+    template.hasResourceProperties('AWS::Route53::RecordSet', {
+      Name: 'static.fionnmowlds.online.',
+      Type: type,
+      HostedZoneId: 'Z0TESTZONE',
+    });
+  }
+});
+
+test('stack outputs both HTTPS addresses of the site', () => {
+  template.hasOutput('SiteUrl', { Value: 'https://static.fionnmowlds.online' });
+  template.hasOutput('CloudFrontUrl', {
     Value: { 'Fn::Join': ['', ['https://', { 'Fn::GetAtt': [Match.stringLikeRegexp('SiteDistribution'), 'DomainName'] }]] },
   });
 });

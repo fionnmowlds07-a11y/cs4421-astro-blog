@@ -77,16 +77,25 @@ jobs:
         working-directory: cdk
         run: npx cdk deploy AstroBlogSsr -c imageTag=${{ steps.image.outputs.tag }} --require-approval never --outputs-file ssr-outputs.json
 
-      - name: Check /api/health Through CloudFront
+      # The CloudFront address must work. My domain's addresses only exist while a session runs, so DNS servers can
+      # still remember them as missing for a few minutes: those only give a warning.
+      - name: Check /api/health on Every Address
         run: |
-          url=$(jq -r '.AstroBlogSsr.SiteUrl' cdk/ssr-outputs.json)
-          for attempt in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$url/api/health" || true)
-            echo "Attempt $attempt: $code"
-            [ "$code" = "200" ] && exit 0
-            sleep 15
+          check() {
+            for attempt in $(seq 1 20); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$1/api/health" || true)
+              echo "$1 attempt $attempt: $code"
+              [ "$code" = "200" ] && return 0
+              sleep 15
+            done
+            return 1
+          }
+          out=cdk/ssr-outputs.json
+          check "$(jq -r '.AstroBlogSsr.CloudFrontUrl' "$out")" || { echo "/api/health never returned 200 on CloudFront"; exit 1; }
+          for key in SiteUrl LoadBalancerUrl; do
+            url=$(jq -r ".AstroBlogSsr.$key" "$out")
+            check "$url" || echo "::warning::$url/api/health didn't return 200 yet (DNS can take a few minutes)"
           done
-          echo "/api/health never returned 200"; exit 1
 
       # The addresses and names change every session, so they are printed here for the runbook.
       - name: Show the Addresses and Names
@@ -98,7 +107,7 @@ jobs:
             echo "### SSR site is up (image: ${{ steps.image.outputs.tags }})"
             echo "| What | Value |"
             echo "|---|---|"
-            for key in SiteUrl LoadBalancerUrl ClusterName ServiceName LogGroupName; do
+            for key in SiteUrl CloudFrontUrl LoadBalancerUrl ClusterName ServiceName LogGroupName; do
               echo "| $key | $(jq -r ".AstroBlogSsr.$key" "$out") |"
             done
             echo ""

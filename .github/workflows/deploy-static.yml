@@ -74,8 +74,13 @@ jobs:
           STATIC_SITE_DIR: ${{ runner.temp }}/static-site/dist
         run: npx cdk deploy StaticSiteStack --require-approval never --outputs-file outputs.json
 
-      - name: Show the Site URL
+      - name: Show the Site URLs
         run: |
           url=$(jq -r '.StaticSiteStack.SiteUrl' cdk/outputs.json)
-          echo "Static site (${{ inputs.ref }}): $url"
-          echo "### Static site (${{ inputs.ref }}) deployed: $url" >> "$GITHUB_STEP_SUMMARY"
+          cdn=$(jq -r '.StaticSiteStack.CloudFrontUrl' cdk/outputs.json)
+          echo "Static site (${{ inputs.ref }}): $url and $cdn"
+          {
+            echo "### Static site (${{ inputs.ref }}) deployed"
+            echo "- My domain: $url"
+            echo "- CloudFront: $cdn"
+          } >> "$GITHUB_STEP_SUMMARY"

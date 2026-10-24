@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
@@ -6,12 +7,18 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import { DOMAIN } from './domain-stack';
 import { ImagesStack } from './images-stack';
 
 export interface SsrStackProps extends cdk.StackProps {
   /** Which image in ECR to run, e.g. a commit ID or v2.0.0. */
   imageTag: string;
+  // My domain's zone and wildcard certificate (DomainStack), for blog. and lb.fionnmowlds.online.
+  zone: route53.IHostedZone;
+  certificate: acm.ICertificate;
 }
 
 /** Runtime keys the container gets from Parameter Store (SecureString). Their values are never in the repo or image. */
@@ -20,7 +27,7 @@ export const PARAMETER_PREFIX = '/astro-blog/';
 
 /**
  * The containerised SSR site: 2 copies of the image on ECS Fargate behind a load balancer that only sends visitors
- * to copies passing /api/health, with CloudFront in front for HTTPS. Created by "infra-up" and deleted by
+ * to copies passing /api/health, with CloudFront in front, HTTPS all the way. Created by "infra-up" and deleted by
  * "infra-down", so it only costs money while a session is running.
  */
 export class SsrStack extends cdk.Stack {
@@ -85,7 +92,9 @@ export class SsrStack extends cdk.Stack {
     });
 
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true });
-    const listener = loadBalancer.addListener('Http', { port: 80, open: true });
+    // HTTPS with my wildcard certificate (as lb.fionnmowlds.online); plain HTTP is redirected to HTTPS.
+    const listener = loadBalancer.addListener('Https', { port: 443, certificates: [props.certificate], open: true });
+    loadBalancer.addRedirect({ sourcePort: 80, targetPort: 443 });
     listener.addTargets('Site', {
       port: 4321,
       protocol: elbv2.ApplicationProtocol.HTTP,
@@ -102,24 +111,54 @@ export class SsrStack extends cdk.Stack {
       deregistrationDelay: cdk.Duration.seconds(10), // old copies are let go quickly during a rollout
     });
 
+    // CloudFront talks to the load balancer over HTTPS as lb.fionnmowlds.online, so the Host header it sends must
+    // be that name (the certificate can't cover dxxxx.cloudfront.net). This function passes the address the visitor
+    // used along as X-Forwarded-Host instead, which Astro trusts for the domains in allowedDomains.
+    const forwardHost = new cloudfront.Function(this, 'ForwardHostFunction', {
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  request.headers['x-forwarded-host'] = { value: request.headers.host.value };
+  return request;
+}
+`),
+    });
+
     // HTTPS in front of the load balancer (the login cookies are Secure, so they need HTTPS).
-    // Caching follows the site's own Cache-Control headers; ALL_VIEWER passes cookies, query strings and the Host
-    // header through, so forms, logins and Astro's origin check see the CloudFront address.
+    // Caching follows the site's own Cache-Control headers; cookies, query strings and the other headers are passed
+    // through, so forms, logins and Astro's origin check work.
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
       defaultBehavior: {
-        origin: new origins.HttpOrigin(loadBalancer.loadBalancerDnsName, {
-          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+        origin: new origins.HttpOrigin(DOMAIN.loadBalancer, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         cachePolicy: cloudfront.CachePolicy.USE_ORIGIN_CACHE_CONTROL_HEADERS_QUERY_STRINGS,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        functionAssociations: [{ function: forwardHost, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
+      domainNames: [DOMAIN.blog],
+      certificate: props.certificate,
     });
 
+    // blog. -> CloudFront (IPv4 and IPv6), lb. -> the load balancer. Deleted with the stack by Infra Down.
+    const cdnTarget = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution));
+    new route53.ARecord(this, 'BlogRecord', { zone: props.zone, recordName: DOMAIN.blog, target: cdnTarget });
+    new route53.AaaaRecord(this, 'BlogRecordIpv6', { zone: props.zone, recordName: DOMAIN.blog, target: cdnTarget });
+    const loadBalancerRecord = new route53.ARecord(this, 'LoadBalancerRecord', {
+      zone: props.zone,
+      recordName: DOMAIN.loadBalancer,
+      target: route53.RecordTarget.fromAlias(new targets.LoadBalancerTarget(loadBalancer)),
+    });
+    // Create CloudFront only once lb. exists, so it never looks the name up too early and remembers it as missing.
+    distribution.node.addDependency(loadBalancerRecord);
+
     // Printed by infra-up, so you always know this session's addresses and names (they change every session).
-    new cdk.CfnOutput(this, 'SiteUrl', { description: 'HTTPS address (CloudFront)', value: `https://${distribution.distributionDomainName}` });
-    new cdk.CfnOutput(this, 'LoadBalancerUrl', { description: 'Load balancer address (HTTP only)', value: `http://${loadBalancer.loadBalancerDnsName}` });
+    new cdk.CfnOutput(this, 'SiteUrl', { description: 'The site on my domain (CloudFront)', value: `https://${DOMAIN.blog}` });
+    new cdk.CfnOutput(this, 'CloudFrontUrl', { description: 'The same site on its CloudFront address', value: `https://${distribution.distributionDomainName}` });
+    new cdk.CfnOutput(this, 'LoadBalancerUrl', { description: 'The load balancer directly (HTTPS)', value: `https://${DOMAIN.loadBalancer}` });
     new cdk.CfnOutput(this, 'ClusterName', { value: cluster.clusterName });
     new cdk.CfnOutput(this, 'ServiceName', { value: service.serviceName });
     new cdk.CfnOutput(this, 'LogGroupName', { value: logGroup.logGroupName });

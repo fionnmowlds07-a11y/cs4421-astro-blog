@@ -35,7 +35,9 @@ back a broken version automatically** (the deployment circuit breaker).
   stops sending visitors to a copy that fails twice in a row; ECS then replaces it.
 - **Zero-downtime updates:** a new version starts next to the old one (up to 200%) and
   must pass the health check before the old copies are stopped (never below 100%).
-- **CloudFront in front** gives the site an HTTPS address.
+- **CloudFront in front** gives the site an HTTPS address. Since #121 it's HTTPS all the
+  way to the load balancer, on my own domain: `blog.fionnmowlds.online` (CloudFront) and
+  `lb.fionnmowlds.online` (the load balancer), with one free wildcard certificate.
 - **Images in ECR**, labelled with the commit ID and the release version (e.g. `v2.0.0`).
   Labels can't be moved, so rolling back to a version always means exactly that image.
 - **Secrets in Parameter Store** (SecureString). The containers get them when they
@@ -61,14 +63,11 @@ back a broken version automatically** (the deployment circuit breaker).
   rebuilt before I can roll back to them.
 - Negative: More expensive per hour than one EC2 server, and more parts to understand
   (cluster, task, service, load balancer).
-- Negative: CloudFront talks to the load balancer over plain HTTP, so the last step to
-  the containers isn't encrypted. Logging in still works: browsers mark form posts from
-  the same site (`Sec-Fetch-Site: same-origin`) and Astro accepts those, while posts from
-  other websites get a 403. My own domain (#121) would make it HTTPS all the way through.
+- Negative: My domain's addresses only exist while a session runs, so right after Infra Up
+  DNS servers can still remember them as missing for a few minutes. The CloudFront address
+  always works straight away.
 
 ## What I'd do with more money or time
 
 - Leave the environment running instead of creating and deleting it every session.
-- Use my own domain (`blog.fionnmowlds.online`, #121), with HTTPS all the way to the
-  containers.
 - Add auto-scaling, so more copies start when traffic is high and stop when it drops.

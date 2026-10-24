@@ -19,26 +19,36 @@ All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed
 - GitHub repo variables `AWS_ROLE_ARN` and `AWS_REGION`; the role only trusts runs on `main`.
 - Route 53 hosted zone `fionnmowlds.online` ($0.50 a month). Never delete it: a new zone
   gets new nameservers, which would have to be set again at Namecheap.
+- Wildcard certificate `*.fionnmowlds.online` in the `AstroBlogDomain` stack (free). Created
+  the first time the static or SSR stack is deployed; Infra Down never deletes it.
+- Optional: so `blog.` and `lb.` work sooner after Infra Up, lower how long DNS servers
+  remember a missing name. Route 53 → the zone → the **SOA** record → Edit: set the TTL to
+  `60` and the last number of the value (`86400`) to `60`.
 
 ## Start a session
 
 1. GitHub → **Actions → Infra Up → Run workflow** (branch `main`). It takes about 10–15 minutes.
 2. It creates the ECR repository, builds and pushes the image (labelled with the commit ID,
    plus the release version if the commit has one), deploys the SSR stack and waits until
-   `/api/health` returns 200 through CloudFront.
+   `/api/health` returns 200 through CloudFront, then checks my domain's addresses too.
 3. Open the run's **Summary** for this session's values:
 
-| Output          | What it's for                          |
-| --------------- | -------------------------------------- |
-| SiteUrl         | The site (HTTPS, CloudFront)           |
-| LoadBalancerUrl | The load balancer directly (HTTP only) |
-| ClusterName     | ECS cluster, for the rollback commands |
-| ServiceName     | ECS service, for the rollback commands |
-| LogGroupName    | CloudWatch log group                   |
+| Output          | What it's for                                                   |
+| --------------- | --------------------------------------------------------------- |
+| SiteUrl         | The site on my domain: `https://blog.fionnmowlds.online`        |
+| CloudFrontUrl   | The same site on its CloudFront address (changes every session) |
+| LoadBalancerUrl | The load balancer directly: `https://lb.fionnmowlds.online`     |
+| ClusterName     | ECS cluster, for the rollback commands                          |
+| ServiceName     | ECS service, for the rollback commands                          |
+| LogGroupName    | CloudWatch log group                                            |
 
-Logging in to `/rowing/admin` works on the CloudFront address. The rowing page is cached
-for up to 5 minutes by CloudFront (and 1 minute by the browser), so a new session can take
-a few minutes to show up for visitors.
+It's HTTPS all the way: visitor → CloudFront → load balancer (as `lb.`) → containers inside
+the network. Logging in to `/rowing/admin` works on all three addresses. If `blog.` doesn't
+open straight after Infra Up, DNS servers still remember it as missing from when it was
+down: use the CloudFront address and try again in a few minutes.
+
+The rowing page is cached for up to 5 minutes by CloudFront (and 1 minute by the browser),
+so a new session can take a few minutes to show up for visitors.
 
 ## Check it's healthy
 
@@ -125,15 +135,17 @@ itself (the circuit breaker), and **Infra Up** fails.
 ## End the session
 
 GitHub → **Actions → Infra Down → Run workflow**. It deletes the SSR stack, then the ECR
-repository and its images, and fails if anything is left. The static v1.0.0 site and the
-Route 53 zone stay. Check **Billing** the next day if in doubt.
+repository and its images, and fails if anything is left. The static v1.0.0 site
+(`https://static.fionnmowlds.online`), the Route 53 zone and the certificate stay. Check **Billing** the next day if in doubt.
 
 ## When something goes wrong
 
-| Symptom                                                                 | Likely cause and fix                                                                                                   |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Infra Up fails straight away at `ec2:DescribeAvailabilityZones`         | CDK couldn't look up the availability zones; check the role can assume the `cdk-*` lookup role                         |
-| ECS events say `unable to pull secrets` / `ResourceInitializationError` | A Parameter Store name is missing or misspelled; check the names above                                                 |
-| Copies keep stopping, target group shows `unhealthy`                    | The app fails `/api/health` or crashes at start; read the log group without a filter                                   |
-| Rowing page empty, `?deep=1` fails                                      | Supabase is paused (free tier, after 7 days) or the URL/key parameters are wrong; restore it in the Supabase dashboard |
-| Infra Down fails                                                        | Run it again; if a stack is stuck, delete it in **CloudFormation** and check the ECR repository `astro-blog` is gone   |
+| Symptom                                                                 | Likely cause and fix                                                                                                      |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Infra Up fails straight away at `ec2:DescribeAvailabilityZones`         | CDK couldn't look up the availability zones; check the role can assume the `cdk-*` lookup role                            |
+| ECS events say `unable to pull secrets` / `ResourceInitializationError` | A Parameter Store name is missing or misspelled; check the names above                                                    |
+| Copies keep stopping, target group shows `unhealthy`                    | The app fails `/api/health` or crashes at start; read the log group without a filter                                      |
+| Rowing page empty, `?deep=1` fails                                      | Supabase is paused (free tier, after 7 days) or the URL/key parameters are wrong; restore it in the Supabase dashboard    |
+| `blog.` or `lb.` doesn't open after Infra Up                            | DNS still remembers the name as missing (up to 15 minutes, or 1 with the SOA change above); use the CloudFront address    |
+| CloudFront shows `502 Bad Gateway`                                      | It can't reach `lb.` over HTTPS: check the `lb.` record exists and the load balancer's HTTPS listener has the certificate |
+| Infra Down fails                                                        | Run it again; if a stack is stuck, delete it in **CloudFormation** and check the ECR repository `astro-blog` is gone      |

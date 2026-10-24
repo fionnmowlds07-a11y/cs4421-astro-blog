@@ -1,6 +1,7 @@
 name: Infra Down (SSR Site on ECS)
 # Deletes everything Infra Up created (the SSR stack, then the ECR repository and its images), so nothing keeps
-# costing money between sessions, then checks that nothing is left. The static site and the Route 53 zone stay.
+# costing money between sessions, then checks that nothing is left. The static site, the Route 53 zone and the
+# domain certificate (AstroBlogDomain) stay, as they cost nothing or almost nothing.
 on:
   workflow_dispatch:
 
