@@ -37,8 +37,9 @@ const CHECK_TIMEOUT_MS = 3000;
 
 /**
  * Checks that the Supabase database answers, for /api/health?deep=1.
- * It asks for the REST API's root, which needs a live database connection. (A query for a table can be
- * answered from the API's schema cache even while the database is down, so it isn't a real check.)
+ * It reads one row of erg_sessions, which anyone may read (RLS), so the database itself has to answer, the
+ * same way the Rowing page needs it to. Not the REST API's root: hosted Supabase only answers that with the
+ * secret key, which the website never has, so the live check always said "down".
  */
 export async function checkDatabase(
 	{ url, publishableKey }: SupabaseConfig,
@@ -49,7 +50,7 @@ export async function checkDatabase(
 	const started = performance.now();
 	const latency = () => Math.round(performance.now() - started);
 	try {
-		const response = await fetchFn(new URL('/rest/v1/', url), {
+		const response = await fetchFn(new URL('/rest/v1/erg_sessions?select=id&limit=1', url), {
 			headers: { apikey: publishableKey },
 			signal: AbortSignal.timeout(timeoutMs),
 		});

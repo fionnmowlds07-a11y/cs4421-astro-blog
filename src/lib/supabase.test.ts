@@ -32,14 +32,15 @@ describe('checkDatabase', () => {
 		expect(fetchFn).not.toHaveBeenCalled();
 	});
 
-	it('asks the REST API root with the publishable key and reports ok with the latency', async () => {
+	// Not the REST API root: hosted Supabase only answers that with the secret key (401 with the publishable one).
+	it('reads one row of a public table with the publishable key and reports ok with the latency', async () => {
 		const fetchFn = vi.fn(respond(200));
 		const result = await checkDatabase(LOCAL, fetchFn as typeof fetch);
 
 		expect(result).toMatchObject({ status: 'ok' });
 		expect(result.status === 'ok' && result.latencyMs).toBeGreaterThanOrEqual(0);
 		const [url, init] = fetchFn.mock.calls[0] as unknown as [URL, RequestInit];
-		expect(String(url)).toBe('http://127.0.0.1:54321/rest/v1/');
+		expect(String(url)).toBe('http://127.0.0.1:54321/rest/v1/erg_sessions?select=id&limit=1');
 		expect(init.headers).toEqual({ apikey: LOCAL.publishableKey });
 	});
 
