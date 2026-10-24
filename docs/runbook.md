@@ -1,0 +1,138 @@
+# Runbook: the SSR Site on AWS
+
+How to start, check, debug, roll back and stop the containerised site (ADR-003). The
+environment only exists during a session, so its addresses and names change every time:
+they are in the summary of the **Infra Up** run.
+
+All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed in as
+`fionn-admin` in **N. Virginia (us-east-1)**. My laptop's AWS keys belong to the old account.
+
+## One-time setup (already done)
+
+- Supabase project `sdeutzqfwyfataqwxvur`: migrations pushed with `supabase db push`
+  (never the seed), my admin login added to `public.admins`, sign-ups off, minimum
+  password length 12.
+- Parameter Store (SecureString), read by the containers when they start:
+  `/astro-blog/SUPABASE_URL`, `/astro-blog/SUPABASE_PUBLISHABLE_KEY`,
+  `/astro-blog/FOOTBALL_DATA_API_KEY`. Check they exist (names only):
+  `aws ssm describe-parameters --query "Parameters[].Name"`
+- GitHub repo variables `AWS_ROLE_ARN` and `AWS_REGION`; the role only trusts runs on `main`.
+- Route 53 hosted zone `fionnmowlds.online` ($0.50 a month). Never delete it: a new zone
+  gets new nameservers, which would have to be set again at Namecheap.
+
+## Start a session
+
+1. GitHub → **Actions → Infra Up → Run workflow** (branch `main`). It takes about 10–15 minutes.
+2. It creates the ECR repository, builds and pushes the image (labelled with the commit ID,
+   plus the release version if the commit has one), deploys the SSR stack and waits until
+   `/api/health` returns 200 through CloudFront.
+3. Open the run's **Summary** for this session's values:
+
+| Output          | What it's for                          |
+| --------------- | -------------------------------------- |
+| SiteUrl         | The site (HTTPS, CloudFront)           |
+| LoadBalancerUrl | The load balancer directly (HTTP only) |
+| ClusterName     | ECS cluster, for the rollback commands |
+| ServiceName     | ECS service, for the rollback commands |
+| LogGroupName    | CloudWatch log group                   |
+
+Known limit: logging in to `/rowing/admin` doesn't work on the CloudFront address yet, as
+CloudFront talks to the load balancer over HTTP (fixed by my own domain in #121).
+
+## Check it's healthy
+
+- `<SiteUrl>/api/health` → 200 (the app is running, no database needed).
+- `<SiteUrl>/api/health?deep=1` → also checks Supabase.
+- EC2 → **Target groups** → the site's target group → **Targets**: both copies `healthy`.
+- ECS → cluster → service → **Deployments / Events**: what ECS did and why (failed health
+  checks, replaced copies, circuit breaker rollbacks).
+
+## Read the logs
+
+Every request writes one JSON line: `timestamp`, `level`, `route`, `method`, `statusCode`,
+`latencyMs`. The load balancer calls `/api/health` every 15 seconds, so filter it out.
+
+**Live (fault triage):** CloudWatch → Logs → **Live Tail** → pick the log group → Start.
+Filter with `ERROR` to see only failures. Crashes at startup are plain text, not JSON, so
+look without a filter too. Stop Live Tail afterwards.
+
+**From CloudShell:**
+
+```
+aws logs tail <LogGroupName> --follow --filter-pattern ERROR
+```
+
+**Logs Insights** (CloudWatch → Logs → Logs Insights, pick the log group):
+
+```
+fields @timestamp, route, statusCode, latencyMs
+| filter level = "ERROR"
+| sort @timestamp desc
+| limit 50
+```
+
+p95 / p99 latency per minute:
+
+```
+filter route != "/api/health"
+| stats count(*) as requests, pct(latencyMs, 95) as p95, pct(latencyMs, 99) as p99 by bin(1m)
+```
+
+Slow or failing pages:
+
+```
+filter route != "/api/health"
+| stats count(*) as requests, sum(statusCode >= 500) as errors, pct(latencyMs, 95) as p95 by route
+```
+
+## Roll back to the previous version
+
+A rollback needs an older image in this session's repository, as every session starts
+empty. To have one, run **Infra Up** once, merge a change, then run **Infra Up** again:
+each deploy registers a new task definition revision pointing at its image, and the
+older revision stays available.
+
+Pointing the service back at the previous revision is the fastest way (no build, no
+CloudFormation). In CloudShell:
+
+```
+C=<ClusterName>; S=<ServiceName>
+
+# What's running now, and the latest revisions of the same task definition
+CURRENT=$(aws ecs describe-services --cluster "$C" --services "$S" --query 'services[0].taskDefinition' --output text)
+FAMILY=$(echo "$CURRENT" | sed -E 's#.*/([^:]+):[0-9]+$#\1#')
+aws ecs list-task-definitions --family-prefix "$FAMILY" --sort DESC --query 'taskDefinitionArns[:3]'
+
+# Check which image a revision runs (the label is the commit ID or version)
+aws ecs describe-task-definition --task-definition <revision ARN> --query 'taskDefinition.containerDefinitions[0].image'
+
+# Roll back to the previous revision and wait until it's done
+aws ecs update-service --cluster "$C" --service "$S" --task-definition <previous revision ARN>
+aws ecs wait services-stable --cluster "$C" --services "$S"
+curl -s -o /dev/null -w '%{http_code}\n' <SiteUrl>/api/health
+```
+
+The new copies start next to the broken ones and only take over once they pass
+`/api/health`, so the site isn't down while rolling back (about 60–90 seconds).
+
+Afterwards the stack still says the newer image, so the next **Infra Up** deploys the
+newest commit again. Fix the bug on a branch first.
+
+If a broken version fails its health checks during a deploy, ECS rolls it back by
+itself (the circuit breaker), and **Infra Up** fails.
+
+## End the session
+
+GitHub → **Actions → Infra Down → Run workflow**. It deletes the SSR stack, then the ECR
+repository and its images, and fails if anything is left. The static v1.0.0 site and the
+Route 53 zone stay. Check **Billing** the next day if in doubt.
+
+## When something goes wrong
+
+| Symptom                                                                 | Likely cause and fix                                                                                                   |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Infra Up fails straight away at `ec2:DescribeAvailabilityZones`         | CDK couldn't look up the availability zones; check the role can assume the `cdk-*` lookup role                         |
+| ECS events say `unable to pull secrets` / `ResourceInitializationError` | A Parameter Store name is missing or misspelled; check the names above                                                 |
+| Copies keep stopping, target group shows `unhealthy`                    | The app fails `/api/health` or crashes at start; read the log group without a filter                                   |
+| Rowing page empty, `?deep=1` fails                                      | Supabase is paused (free tier, after 7 days) or the URL/key parameters are wrong; restore it in the Supabase dashboard |
+| Infra Down fails                                                        | Run it again; if a stack is stuck, delete it in **CloudFormation** and check the ECR repository `astro-blog` is gone   |
