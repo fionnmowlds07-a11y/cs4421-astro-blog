@@ -5,10 +5,13 @@ import { ImagesStack } from '../lib/images-stack';
 import { SsrStack } from '../lib/ssr-stack';
 
 const app = new cdk.App();
-new StaticSiteStack(app, 'StaticSiteStack', {
-  // The built static site to upload. The deploy workflow builds a static release (e.g. the v1.0.0 tag)
-  // in its own folder and points STATIC_SITE_DIR at it; otherwise it's this repo's ../dist.
-  siteAssetPath: process.env.STATIC_SITE_DIR,
+
+// The built static site to upload. The deploy workflow builds a static release (e.g. the v1.0.0 tag) in its own
+// folder and points STATIC_SITE_DIR at it. CDK loads every stack in this file even when deploying just one, so
+// the static stack is only added when that folder is given: infra-up/infra-down have no built site to upload.
+const staticSiteDir = process.env.STATIC_SITE_DIR;
+if (staticSiteDir) new StaticSiteStack(app, 'StaticSiteStack', {
+  siteAssetPath: staticSiteDir,
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */
