@@ -1,0 +1,106 @@
+name: Infra Up (SSR Site on ECS)
+# Creates the containerised SSR site for a session: the ECR repository, the site image built from main, then the
+# SSR stack (2 Fargate copies behind a health-checked load balancer, CloudFront in front). It costs money while it
+# runs, so run "Infra Down" when the session is over. Logs in to AWS with OIDC: no AWS keys are stored in GitHub.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # lets the job ask GitHub for the signed token it swaps for temporary AWS credentials
+
+# Up and down share one queue, so they can never run over each other.
+concurrency:
+  group: ssr-infra
+  cancel-in-progress: false
+
+jobs:
+  up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # so the release tag (vX.Y.Z) on this commit can be found
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: cdk/package-lock.json
+
+      - name: Install CDK Dependencies
+        working-directory: cdk
+        run: npm ci
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # The repository has to exist before an image can be pushed into it.
+      - name: Create the ECR Repository
+        working-directory: cdk
+        run: npx cdk deploy AstroBlogImages --require-approval never --outputs-file images-outputs.json
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Every image is labelled with its commit ID; a release commit also gets its version (e.g. v2.0.0), which is
+      # what a rollback asks for. Labels can't be moved once pushed, so labels that already exist are skipped.
+      - name: Build, Tag and Push Image
+        id: image
+        run: |
+          repo=$(jq -r '.AstroBlogImages.RepositoryUri' cdk/images-outputs.json)
+          sha_tag="${GITHUB_SHA::7}"
+          tags="$sha_tag"
+          release=$(git tag --points-at HEAD --list 'v*' | head -n 1)
+          [ -n "$release" ] && tags="$tags $release"
+
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$repo:$sha_tag" .
+          for tag in $tags; do
+            if aws ecr describe-images --repository-name astro-blog --image-ids imageTag="$tag" >/dev/null 2>&1; then
+              echo "$repo:$tag already exists, skipping"
+            else
+              docker tag "$repo:$sha_tag" "$repo:$tag"
+              docker push "$repo:$tag"
+            fi
+          done
+          echo "tag=$sha_tag" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      # CloudFormation waits until both copies pass /api/health behind the load balancer (or rolls back).
+      - name: Deploy the SSR Stack
+        working-directory: cdk
+        run: npx cdk deploy AstroBlogSsr -c imageTag=${{ steps.image.outputs.tag }} --require-approval never --outputs-file ssr-outputs.json
+
+      - name: Check /api/health Through CloudFront
+        run: |
+          url=$(jq -r '.AstroBlogSsr.SiteUrl' cdk/ssr-outputs.json)
+          for attempt in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url/api/health" || true)
+            echo "Attempt $attempt: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "/api/health never returned 200"; exit 1
+
+      # The addresses and names change every session, so they are printed here for the runbook.
+      - name: Show the Addresses and Names
+        if: always()
+        run: |
+          out=cdk/ssr-outputs.json
+          [ -f "$out" ] || { echo "The SSR stack didn't deploy, no outputs to show"; exit 0; }
+          {
+            echo "### SSR site is up (image: ${{ steps.image.outputs.tags }})"
+            echo "| What | Value |"
+            echo "|---|---|"
+            for key in SiteUrl LoadBalancerUrl ClusterName ServiceName LogGroupName; do
+              echo "| $key | $(jq -r ".AstroBlogSsr.$key" "$out") |"
+            done
+            echo ""
+            echo "Remember to run **Infra Down** when the session is over."
+          } >> "$GITHUB_STEP_SUMMARY"

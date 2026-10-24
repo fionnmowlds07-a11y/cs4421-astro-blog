@@ -1,0 +1,60 @@
+name: Infra Down (SSR Site on ECS)
+# Deletes everything Infra Up created (the SSR stack, then the ECR repository and its images), so nothing keeps
+# costing money between sessions, then checks that nothing is left. The static site and the Route 53 zone stay.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # lets the job ask GitHub for the signed token it swaps for temporary AWS credentials
+
+# Up and down share one queue, so they can never run over each other.
+concurrency:
+  group: ssr-infra
+  cancel-in-progress: false
+
+jobs:
+  down:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: cdk/package-lock.json
+
+      - name: Install CDK Dependencies
+        working-directory: cdk
+        run: npm ci
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # The SSR stack first: its containers run images from the repository.
+      - name: Destroy the SSR Stack, Then the ECR Repository
+        working-directory: cdk
+        run: |
+          npx cdk destroy AstroBlogSsr --force
+          npx cdk destroy AstroBlogImages --force
+
+      - name: Check Nothing Is Left
+        run: |
+          left=0
+          for stack in AstroBlogSsr AstroBlogImages; do
+            if aws cloudformation describe-stacks --stack-name "$stack" >/dev/null 2>&1; then
+              echo "Stack $stack still exists"; left=1
+            fi
+          done
+          if aws ecr describe-repositories --repository-names astro-blog >/dev/null 2>&1; then
+            echo "ECR repository astro-blog still exists"; left=1
+          fi
+          [ "$left" = 0 ] || exit 1
+          echo "### SSR site is down: both stacks and the ECR repository are gone" >> "$GITHUB_STEP_SUMMARY"
