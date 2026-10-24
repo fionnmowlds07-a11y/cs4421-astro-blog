@@ -36,8 +36,9 @@ All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed
 | ServiceName     | ECS service, for the rollback commands |
 | LogGroupName    | CloudWatch log group                   |
 
-Known limit: logging in to `/rowing/admin` doesn't work on the CloudFront address yet, as
-CloudFront talks to the load balancer over HTTP (fixed by my own domain in #121).
+Logging in to `/rowing/admin` works on the CloudFront address. The rowing page is cached
+for up to 5 minutes by CloudFront (and 1 minute by the browser), so a new session can take
+a few minutes to show up for visitors.
 
 ## Check it's healthy
 

@@ -61,9 +61,10 @@ back a broken version automatically** (the deployment circuit breaker).
   rebuilt before I can roll back to them.
 - Negative: More expensive per hour than one EC2 server, and more parts to understand
   (cluster, task, service, load balancer).
-- Negative: CloudFront talks to the load balancer over plain HTTP, so Astro's form origin
-  check refuses logins on the CloudFront address. My own domain (#121) fixes this with
-  HTTPS all the way through.
+- Negative: CloudFront talks to the load balancer over plain HTTP, so the last step to
+  the containers isn't encrypted. Logging in still works: browsers mark form posts from
+  the same site (`Sec-Fetch-Site: same-origin`) and Astro accepts those, while posts from
+  other websites get a 403. My own domain (#121) would make it HTTPS all the way through.
 
 ## What I'd do with more money or time
 
