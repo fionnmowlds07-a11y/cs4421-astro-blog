@@ -7,7 +7,8 @@ import { defineConfig, envField, fontProviders } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
-    site: 'https://example.com',
+    // The site's real address, used for canonical links, the RSS feed and the sitemap.
+    site: 'https://blog.fionnmowlds.online',
     output: 'server',
     adapter: node({
         mode: 'standalone',
@@ -18,9 +19,16 @@ export default defineConfig({
         // incoming Host header for domains listed here (otherwise it assumes "localhost"). Add the real
         // domain when the site is deployed, or logging in there will be refused.
         checkOrigin: true,
-        // On AWS the site is reached through CloudFront, whose address (dxxxx.cloudfront.net) changes every time
-        // the environment is created, so any single CloudFront subdomain is trusted.
-        allowedDomains: [{ hostname: 'localhost' }, { hostname: '127.0.0.1' }, { hostname: '*.cloudfront.net' }],
+        // On AWS the site is reached on my domain (blog.), on the load balancer directly (lb.), or on its CloudFront
+        // address (dxxxx.cloudfront.net), which changes every time the environment is created, so any single
+        // CloudFront subdomain is trusted. CloudFront passes the visitor's address in X-Forwarded-Host.
+        allowedDomains: [
+            { hostname: 'localhost' },
+            { hostname: '127.0.0.1' },
+            { hostname: 'blog.fionnmowlds.online' },
+            { hostname: 'lb.fionnmowlds.online' },
+            { hostname: '*.cloudfront.net' },
+        ],
     },
     // The blog moved to /about-me and replaced the template /about page; keep old links (and RSS readers) working.
     redirects: {

@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
 import { StaticSiteStack } from '../lib/cdk-stack';
+import { DomainStack } from '../lib/domain-stack';
 import { ImagesStack } from '../lib/images-stack';
 import { SsrStack } from '../lib/ssr-stack';
 
 const app = new cdk.App();
+const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' };
+
+// My domain's wildcard certificate (and the lookup of its Route 53 zone). Permanent: Infra Down never deletes it.
+// Deploying the static or SSR stack deploys this first if it's missing or changed.
+const domain = new DomainStack(app, 'AstroBlogDomain', { env });
 
 // The built static site to upload. The deploy workflow builds a static release (e.g. the v1.0.0 tag) in its own
 // folder and points STATIC_SITE_DIR at it. CDK loads every stack in this file even when deploying just one, so
@@ -12,13 +18,15 @@ const app = new cdk.App();
 const staticSiteDir = process.env.STATIC_SITE_DIR;
 if (staticSiteDir) new StaticSiteStack(app, 'StaticSiteStack', {
   siteAssetPath: staticSiteDir,
+  zone: domain.zone,
+  certificate: domain.certificate,
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */
 
   /* Uncomment the next line to specialize this stack for the AWS Account
    * and Region that are implied by the current CLI configuration. */
-  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' },
+  env,
 
   /* Uncomment the next line if you know exactly what Account and Region you
    * want to deploy the stack to. */
@@ -28,12 +36,12 @@ if (staticSiteDir) new StaticSiteStack(app, 'StaticSiteStack', {
 });
 
 // The SSR site's Docker images (ECR). Created and deleted together with the SSR environment by infra-up/infra-down.
-new ImagesStack(app, 'AstroBlogImages', {
-  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' },
-});
+new ImagesStack(app, 'AstroBlogImages', { env });
 
 // The containerised SSR site. infra-up passes the image to run with `-c imageTag=<commit ID or vX.Y.Z>`.
 new SsrStack(app, 'AstroBlogSsr', {
-  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1' },
+  env,
   imageTag: app.node.tryGetContext('imageTag') ?? 'latest',
+  zone: domain.zone,
+  certificate: domain.certificate,
 });

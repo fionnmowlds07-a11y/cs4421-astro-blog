@@ -4,14 +4,21 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as targets from 'aws-cdk-lib/aws-route53-targets';
+import { DOMAIN } from './domain-stack';
 
 export interface StaticSiteStackProps extends cdk.StackProps {
   // Directory uploaded to the bucket; overridable so tests don't need a site build.
   siteAssetPath?: string;
+  // My domain's zone and wildcard certificate (DomainStack), for static.fionnmowlds.online.
+  zone: route53.IHostedZone;
+  certificate: acm.ICertificate;
 }
 
 export class StaticSiteStack extends cdk.Stack {
-  constructor(scope: cdk.App, id: string, props?: StaticSiteStackProps) {
+  constructor(scope: cdk.App, id: string, props: StaticSiteStackProps) {
     super(scope, id, props);
 
     const siteBucket = new s3.Bucket(this, 'SiteBucket', {
@@ -51,18 +58,29 @@ function handler(event) {
         ],
       },
       defaultRootObject: 'index.html',
+      domainNames: [DOMAIN.static],
+      certificate: props.certificate,
     });
 
+    // static.fionnmowlds.online -> this CloudFront distribution (IPv4 and IPv6)
+    const target = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution));
+    new route53.ARecord(this, 'SiteRecord', { zone: props.zone, recordName: DOMAIN.static, target });
+    new route53.AaaaRecord(this, 'SiteRecordIpv6', { zone: props.zone, recordName: DOMAIN.static, target });
+
     new s3deploy.BucketDeployment(this, 'DeploySite', {
-      sources: [s3deploy.Source.asset(props?.siteAssetPath ?? '../dist')],
+      sources: [s3deploy.Source.asset(props.siteAssetPath ?? '../dist')],
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ['/*'], // Automatic CloudFront CDN cache invalidation!
     });
 
-    // Printed at the end of `cdk deploy` (and saved by the workflow), so the site's address is easy to find.
+    // Printed at the end of `cdk deploy` (and saved by the workflow), so the site's addresses are easy to find.
     new cdk.CfnOutput(this, 'SiteUrl', {
-      description: 'Public HTTPS address of the static site',
+      description: 'Public HTTPS address of the static site (my domain)',
+      value: `https://${DOMAIN.static}`,
+    });
+    new cdk.CfnOutput(this, 'CloudFrontUrl', {
+      description: 'The same site on its CloudFront address',
       value: `https://${distribution.distributionDomainName}`,
     });
   }
