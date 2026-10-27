@@ -63,6 +63,40 @@ test('container logs go to a CloudWatch log group that is deleted with the stack
   template.hasResource('AWS::Logs::LogGroup', { DeletionPolicy: 'Delete' });
 });
 
+test('counts 5xx responses from the JSON logs, as 0 in quiet minutes', () => {
+  template.hasResourceProperties('AWS::Logs::MetricFilter', {
+    FilterPattern: '{ $.statusCode >= 500 }',
+    MetricTransformations: [
+      Match.objectLike({ MetricNamespace: 'AstroBlog', MetricName: 'ServerErrors', MetricValue: '1', DefaultValue: 0 }),
+    ],
+  });
+});
+
+test('alarms on 5xx errors and on unhealthy copies when 2 of the last 3 minutes are bad', () => {
+  const timing = {
+    Period: 60,
+    EvaluationPeriods: 3,
+    DatapointsToAlarm: 2,
+    Threshold: 1,
+    ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+    TreatMissingData: 'notBreaching',
+  };
+  template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+    AlarmName: 'astro-blog-server-errors',
+    Namespace: 'AstroBlog',
+    MetricName: 'ServerErrors',
+    Statistic: 'Sum',
+    ...timing,
+  });
+  template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+    AlarmName: 'astro-blog-unhealthy-copies',
+    Namespace: 'AWS/ApplicationELB',
+    MetricName: 'UnHealthyHostCount',
+    Statistic: 'Maximum',
+    ...timing,
+  });
+});
+
 test('CloudFront redirects to HTTPS and passes cookies, query strings and headers (except Host) through', () => {
   template.hasResourceProperties('AWS::CloudFront::Distribution', {
     DistributionConfig: Match.objectLike({
