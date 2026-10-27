@@ -2,8 +2,14 @@ name: Infra Up (SSR Site on ECS)
 # Creates the containerised SSR site for a session: the ECR repository, the site image built from main, then the
 # SSR stack (2 Fargate copies behind a health-checked load balancer, CloudFront in front). It costs money while it
 # runs, so run "Infra Down" when the session is over. Logs in to AWS with OIDC: no AWS keys are stored in GitHub.
+# "Image only" builds and pushes the image without touching the running site, for deploying or rolling back by hand.
 on:
   workflow_dispatch:
+    inputs:
+      image_only:
+        description: 'Image only: build and push the image, leave the running site as it is'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -74,12 +80,14 @@ jobs:
 
       # CloudFormation waits until both copies pass /api/health behind the load balancer (or rolls back).
       - name: Deploy the SSR Stack
+        if: ${{ !inputs.image_only }}
         working-directory: cdk
         run: npx cdk deploy AstroBlogSsr -c imageTag=${{ steps.image.outputs.tag }} --require-approval never --outputs-file ssr-outputs.json
 
       # The CloudFront address must work. My domain's addresses only exist while a session runs, so DNS servers can
       # still remember them as missing for a few minutes: those only give a warning.
       - name: Check /api/health on Every Address
+        if: ${{ !inputs.image_only }}
         run: |
           check() {
             for attempt in $(seq 1 20); do
@@ -99,7 +107,7 @@ jobs:
 
       # The addresses and names change every session, so they are printed here for the runbook.
       - name: Show the Addresses and Names
-        if: always()
+        if: ${{ always() && !inputs.image_only }}
         run: |
           out=cdk/ssr-outputs.json
           [ -f "$out" ] || { echo "The SSR stack didn't deploy, no outputs to show"; exit 0; }
@@ -112,4 +120,16 @@ jobs:
             done
             echo ""
             echo "Remember to run **Infra Down** when the session is over."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # With "Image only" the site keeps running the image it had, so this prints the label to deploy by hand
+      # (runbook: "Deploy a chosen image by hand").
+      - name: Show the Pushed Image
+        if: ${{ inputs.image_only }}
+        run: |
+          {
+            echo "### Image pushed, the running site wasn't changed"
+            echo "Label: \`${{ steps.image.outputs.tag }}\` (all labels: ${{ steps.image.outputs.tags }})"
+            echo ""
+            echo "Deploy it by hand with the runbook's \"Deploy a chosen image by hand\" steps."
           } >> "$GITHUB_STEP_SUMMARY"
