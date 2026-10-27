@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
@@ -95,7 +96,7 @@ export class SsrStack extends cdk.Stack {
     // HTTPS with my wildcard certificate (as lb.fionnmowlds.online); plain HTTP is redirected to HTTPS.
     const listener = loadBalancer.addListener('Https', { port: 443, certificates: [props.certificate], open: true });
     loadBalancer.addRedirect({ sourcePort: 80, targetPort: 443 });
-    listener.addTargets('Site', {
+    const targetGroup = listener.addTargets('Site', {
       port: 4321,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [service],
@@ -109,6 +110,41 @@ export class SsrStack extends cdk.Stack {
         unhealthyThresholdCount: 2,
       },
       deregistrationDelay: cdk.Duration.seconds(10), // old copies are let go quickly during a rollout
+    });
+
+    // Alarms (shown in CloudWatch → Alarms, no notifications). Both go off when 2 of the last 3 minutes are bad:
+    // with my traffic even one 5xx is real, but a single blip shouldn't set them off.
+    const alarmTiming = {
+      evaluationPeriods: 3,
+      datapointsToAlarm: 2,
+      threshold: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    };
+
+    // Counts the app's own 5xx responses from the JSON log lines. defaultValue 0 means a quiet minute counts as
+    // 0 errors instead of "no data".
+    const serverErrors = new logs.MetricFilter(this, 'ServerErrorsFilter', {
+      logGroup,
+      filterPattern: logs.FilterPattern.numberValue('$.statusCode', '>=', 500),
+      metricNamespace: 'AstroBlog',
+      metricName: 'ServerErrors',
+      metricValue: '1',
+      defaultValue: 0,
+    });
+    new cloudwatch.Alarm(this, 'ServerErrorsAlarm', {
+      alarmName: 'astro-blog-server-errors',
+      alarmDescription: 'The site returned 5xx errors in 2 of the last 3 minutes. Check the log group, then roll back (runbook).',
+      metric: serverErrors.metric({ statistic: cloudwatch.Stats.SUM, period: cdk.Duration.minutes(1) }),
+      ...alarmTiming,
+    });
+
+    // A copy that crashes or fails /api/health may write no 5xx log line at all, so also watch the load balancer.
+    new cloudwatch.Alarm(this, 'UnhealthyCopiesAlarm', {
+      alarmName: 'astro-blog-unhealthy-copies',
+      alarmDescription: 'A copy of the site failed its /api/health check in 2 of the last 3 minutes. Check ECS service events and the logs.',
+      metric: targetGroup.metrics.unhealthyHostCount({ statistic: cloudwatch.Stats.MAXIMUM, period: cdk.Duration.minutes(1) }),
+      ...alarmTiming,
     });
 
     // CloudFront talks to the load balancer over HTTPS as lb.fionnmowlds.online, so the Host header it sends must

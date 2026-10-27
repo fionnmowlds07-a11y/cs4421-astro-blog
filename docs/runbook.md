@@ -67,6 +67,11 @@ Every request writes one JSON line: `timestamp`, `level`, `route`, `method`, `st
 Filter with `ERROR` to see only failures. Crashes at startup are plain text, not JSON, so
 look without a filter too. Stop Live Tail afterwards.
 
+A route that throws an error is also plain text: `[ERROR] Error: <message>` and a stack
+trace, with **no** JSON line for that request (the visitor still gets a 500). The trace
+points at the built file, e.g. `dist/server/chunks/feedback_xxxx.mjs:8:8`: the chunk name
+says which route broke, the line number is in the bundle, so open the matching file in `src/`.
+
 **From CloudShell:**
 
 ```
@@ -95,6 +100,28 @@ Slow or failing pages:
 filter route != "/api/health"
 | stats count(*) as requests, sum(statusCode >= 500) as errors, pct(latencyMs, 95) as p95 by route
 ```
+
+Thrown errors (plain text, so `level = "ERROR"` doesn't find them):
+
+```
+fields @timestamp, @message
+| filter @message like /\[ERROR\]/
+| sort @timestamp desc
+| limit 20
+```
+
+## Alarms
+
+CloudWatch → **Alarms**. No emails: an alarm turns red here. Both go off when 2 of the
+last 3 minutes are bad, and go back to OK by themselves once it's fixed.
+
+| Alarm                         | Watches                                                                 | First look                                                      |
+| ----------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `astro-blog-server-errors`    | 5xx responses in the JSON logs (metric `AstroBlog/ServerErrors`)        | Logs Insights "Slow or failing pages" above, to see which route |
+| `astro-blog-unhealthy-copies` | Copies failing `/api/health` (the load balancer's `UnHealthyHostCount`) | ECS → service → **Events**, then the log group without a filter |
+
+`astro-blog-server-errors` doesn't count routes that throw an error, as they write no JSON
+line (see above). If one breaks `/api/health`, `astro-blog-unhealthy-copies` goes off instead.
 
 ## Roll back to the previous version
 
