@@ -12,7 +12,7 @@ import { DOMAIN } from './domain-stack';
 export interface StaticSiteStackProps extends cdk.StackProps {
   // Directory uploaded to the bucket; overridable so tests don't need a site build.
   siteAssetPath?: string;
-  // My domain's zone and wildcard certificate (DomainStack), for static.fionnmowlds.online.
+  // My domain's zone and wildcard certificate (DomainStack), for static.fionnmowlds.website.
   zone: route53.IHostedZone;
   certificate: acm.ICertificate;
 }
@@ -62,7 +62,7 @@ function handler(event) {
       certificate: props.certificate,
     });
 
-    // static.fionnmowlds.online -> this CloudFront distribution (IPv4 and IPv6)
+    // static.fionnmowlds.website -> this CloudFront distribution (IPv4 and IPv6)
     const target = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution));
     new route53.ARecord(this, 'SiteRecord', { zone: props.zone, recordName: DOMAIN.static, target });
     new route53.AaaaRecord(this, 'SiteRecordIpv6', { zone: props.zone, recordName: DOMAIN.static, target });

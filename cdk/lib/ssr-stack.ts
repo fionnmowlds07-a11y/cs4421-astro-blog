@@ -17,7 +17,7 @@ import { ImagesStack } from './images-stack';
 export interface SsrStackProps extends cdk.StackProps {
   /** Which image in ECR to run, e.g. a commit ID or v2.0.0. */
   imageTag: string;
-  // My domain's zone and wildcard certificate (DomainStack), for blog. and lb.fionnmowlds.online.
+  // My domain's zone and wildcard certificate (DomainStack), for blog. and lb.fionnmowlds.website.
   zone: route53.IHostedZone;
   certificate: acm.ICertificate;
 }
@@ -93,7 +93,7 @@ export class SsrStack extends cdk.Stack {
     });
 
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true });
-    // HTTPS with my wildcard certificate (as lb.fionnmowlds.online); plain HTTP is redirected to HTTPS.
+    // HTTPS with my wildcard certificate (as lb.fionnmowlds.website); plain HTTP is redirected to HTTPS.
     const listener = loadBalancer.addListener('Https', { port: 443, certificates: [props.certificate], open: true });
     loadBalancer.addRedirect({ sourcePort: 80, targetPort: 443 });
     const targetGroup = listener.addTargets('Site', {
@@ -147,7 +147,7 @@ export class SsrStack extends cdk.Stack {
       ...alarmTiming,
     });
 
-    // CloudFront talks to the load balancer over HTTPS as lb.fionnmowlds.online, so the Host header it sends must
+    // CloudFront talks to the load balancer over HTTPS as lb.fionnmowlds.website, so the Host header it sends must
     // be that name (the certificate can't cover dxxxx.cloudfront.net). This function passes the address the visitor
     // used along as X-Forwarded-Host instead, which Astro trusts for the domains in allowedDomains.
     const forwardHost = new cloudfront.Function(this, 'ForwardHostFunction', {

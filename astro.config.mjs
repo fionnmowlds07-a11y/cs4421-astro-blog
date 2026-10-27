@@ -8,7 +8,7 @@ import { defineConfig, envField, fontProviders } from 'astro/config';
 // https://astro.build/config
 export default defineConfig({
     // The site's real address, used for canonical links, the RSS feed and the sitemap.
-    site: 'https://blog.fionnmowlds.online',
+    site: 'https://blog.fionnmowlds.website',
     output: 'server',
     adapter: node({
         mode: 'standalone',
@@ -25,8 +25,8 @@ export default defineConfig({
         allowedDomains: [
             { hostname: 'localhost' },
             { hostname: '127.0.0.1' },
-            { hostname: 'blog.fionnmowlds.online' },
-            { hostname: 'lb.fionnmowlds.online' },
+            { hostname: 'blog.fionnmowlds.website' },
+            { hostname: 'lb.fionnmowlds.website' },
             { hostname: '*.cloudfront.net' },
         ],
     },

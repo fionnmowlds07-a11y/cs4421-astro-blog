@@ -20,9 +20,9 @@ All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed
   `/astro-blog/FOOTBALL_DATA_API_KEY`. Check they exist (names only):
   `aws ssm describe-parameters --query "Parameters[].Name"`
 - GitHub repo variables `AWS_ROLE_ARN` and `AWS_REGION`; the role only trusts runs on `main`.
-- Route 53 hosted zone `fionnmowlds.online` ($0.50 a month). Never delete it: a new zone
-  gets new nameservers, which would have to be set again at Namecheap.
-- Wildcard certificate `*.fionnmowlds.online` in the `AstroBlogDomain` stack (free). Created
+- Route 53 hosted zone `fionnmowlds.website` ($0.50 a month). Never delete it: a new zone
+  gets new nameservers, which would have to be set again at GoDaddy.
+- Wildcard certificate `*.fionnmowlds.website` in the `AstroBlogDomain` stack (free). Created
   the first time the static or SSR stack is deployed; Infra Down never deletes it.
 - Optional: so `blog.` and `lb.` work sooner after Infra Up, lower how long DNS servers
   remember a missing name. Route 53 → the zone → the **SOA** record → Edit: set the TTL to
@@ -38,9 +38,9 @@ All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed
 
 | Output          | What it's for                                                   |
 | --------------- | --------------------------------------------------------------- |
-| SiteUrl         | The site on my domain: `https://blog.fionnmowlds.online`        |
+| SiteUrl         | The site on my domain: `https://blog.fionnmowlds.website`       |
 | CloudFrontUrl   | The same site on its CloudFront address (changes every session) |
-| LoadBalancerUrl | The load balancer directly: `https://lb.fionnmowlds.online`     |
+| LoadBalancerUrl | The load balancer directly: `https://lb.fionnmowlds.website`    |
 | ClusterName     | ECS cluster, for the rollback commands                          |
 | ServiceName     | ECS service, for the rollback commands                          |
 | LogGroupName    | CloudWatch log group                                            |
@@ -166,7 +166,7 @@ itself (the circuit breaker), and **Infra Up** fails.
 
 GitHub → **Actions → Infra Down → Run workflow**. It deletes the SSR stack, then the ECR
 repository and its images, and fails if anything is left. The static v1.0.0 site
-(`https://static.fionnmowlds.online`), the Route 53 zone and the certificate stay. Check **Billing** the next day if in doubt.
+(`https://static.fionnmowlds.website`), the Route 53 zone and the certificate stay. Check **Billing** the next day if in doubt.
 
 ## When something goes wrong
 
