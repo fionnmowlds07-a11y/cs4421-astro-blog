@@ -4,6 +4,9 @@ How to start, check, debug, roll back and stop the containerised site (ADR-003).
 environment only exists during a session, so its addresses and names change every time:
 they are in the summary of the **Infra Up** run.
 
+How reliable the site should be (SLOs, error budget) and the post-mortem template are in
+[sre.md](sre.md).
+
 All AWS commands below run in **CloudShell** (AWS console, top bar `>_`), signed in as
 `fionn-admin` in **N. Virginia (us-east-1)**. My laptop's AWS keys belong to the old account.
 
