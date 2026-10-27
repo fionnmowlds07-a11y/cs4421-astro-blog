@@ -83,16 +83,16 @@ test('deployment invalidates the whole CloudFront cache', () => {
   });
 });
 
-test('the site answers on static.fionnmowlds.online with my certificate', () => {
+test('the site answers on static.fionnmowlds.website with my certificate', () => {
   template.hasResourceProperties('AWS::CloudFront::Distribution', {
     DistributionConfig: Match.objectLike({
-      Aliases: ['static.fionnmowlds.online'],
+      Aliases: ['static.fionnmowlds.website'],
       ViewerCertificate: Match.objectLike({ SslSupportMethod: 'sni-only' }),
     }),
   });
   for (const type of ['A', 'AAAA']) {
     template.hasResourceProperties('AWS::Route53::RecordSet', {
-      Name: 'static.fionnmowlds.online.',
+      Name: 'static.fionnmowlds.website.',
       Type: type,
       HostedZoneId: 'Z0TESTZONE',
     });
@@ -100,7 +100,7 @@ test('the site answers on static.fionnmowlds.online with my certificate', () => 
 });
 
 test('stack outputs both HTTPS addresses of the site', () => {
-  template.hasOutput('SiteUrl', { Value: 'https://static.fionnmowlds.online' });
+  template.hasOutput('SiteUrl', { Value: 'https://static.fionnmowlds.website' });
   template.hasOutput('CloudFrontUrl', {
     Value: { 'Fn::Join': ['', ['https://', { 'Fn::GetAtt': [Match.stringLikeRegexp('SiteDistribution'), 'DomainName'] }]] },
   });

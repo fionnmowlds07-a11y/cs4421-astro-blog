@@ -11,9 +11,9 @@ export const TEST_ENV = { account: '123456789012', region: 'us-east-1' };
 export function appWithDomain() {
   const app = new cdk.App({
     context: {
-      'hosted-zone:account=123456789012:domainName=fionnmowlds.online:region=us-east-1': {
+      'hosted-zone:account=123456789012:domainName=fionnmowlds.website:region=us-east-1': {
         Id: '/hostedzone/Z0TESTZONE',
-        Name: 'fionnmowlds.online.',
+        Name: 'fionnmowlds.website.',
       },
     },
   });

@@ -2,17 +2,17 @@ import * as cdk from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 
-/** My domain (bought at Namecheap, DNS in Route 53) and the addresses used on it. */
+/** My domain (bought at GoDaddy, DNS in Route 53) and the addresses used on it. */
 export const DOMAIN = {
-  name: 'fionnmowlds.online',
-  blog: 'blog.fionnmowlds.online', // the SSR site, through CloudFront
-  loadBalancer: 'lb.fionnmowlds.online', // the SSR site's load balancer, directly
-  static: 'static.fionnmowlds.online', // the static v1.0.0 site
+  name: 'fionnmowlds.website',
+  blog: 'blog.fionnmowlds.website', // the SSR site, through CloudFront
+  loadBalancer: 'lb.fionnmowlds.website', // the SSR site's load balancer, directly
+  static: 'static.fionnmowlds.website', // the static v1.0.0 site
 } as const;
 
 /**
  * The parts of my domain that stay up permanently: the Route 53 zone (created by hand once, so its nameservers
- * at Namecheap never change) and one free wildcard certificate for all the addresses. Infra Down never deletes
+ * at GoDaddy never change) and one free wildcard certificate for all the addresses. Infra Down never deletes
  * this stack, so AWS only has to check I own the domain once, instead of on every Infra Up.
  */
 export class DomainStack extends cdk.Stack {

@@ -110,13 +110,13 @@ test('CloudFront redirects to HTTPS and passes cookies, query strings and header
   });
 });
 
-test('CloudFront answers on blog.fionnmowlds.online and talks to the load balancer over HTTPS as lb.', () => {
+test('CloudFront answers on blog.fionnmowlds.website and talks to the load balancer over HTTPS as lb.', () => {
   template.hasResourceProperties('AWS::CloudFront::Distribution', {
     DistributionConfig: Match.objectLike({
-      Aliases: ['blog.fionnmowlds.online'],
+      Aliases: ['blog.fionnmowlds.website'],
       Origins: [
         Match.objectLike({
-          DomainName: 'lb.fionnmowlds.online',
+          DomainName: 'lb.fionnmowlds.website',
           CustomOriginConfig: Match.objectLike({ OriginProtocolPolicy: 'https-only' }),
         }),
       ],
@@ -144,13 +144,13 @@ test('the load balancer serves HTTPS with my certificate and redirects HTTP to H
 
 test('blog. and lb. records point at CloudFront and the load balancer', () => {
   for (const type of ['A', 'AAAA']) {
-    template.hasResourceProperties('AWS::Route53::RecordSet', { Name: 'blog.fionnmowlds.online.', Type: type, HostedZoneId: 'Z0TESTZONE' });
+    template.hasResourceProperties('AWS::Route53::RecordSet', { Name: 'blog.fionnmowlds.website.', Type: type, HostedZoneId: 'Z0TESTZONE' });
   }
-  template.hasResourceProperties('AWS::Route53::RecordSet', { Name: 'lb.fionnmowlds.online.', Type: 'A', HostedZoneId: 'Z0TESTZONE' });
+  template.hasResourceProperties('AWS::Route53::RecordSet', { Name: 'lb.fionnmowlds.website.', Type: 'A', HostedZoneId: 'Z0TESTZONE' });
 });
 
 test('prints the addresses and names infra-up and the runbook need', () => {
-  template.hasOutput('SiteUrl', { Value: 'https://blog.fionnmowlds.online' });
-  template.hasOutput('LoadBalancerUrl', { Value: 'https://lb.fionnmowlds.online' });
+  template.hasOutput('SiteUrl', { Value: 'https://blog.fionnmowlds.website' });
+  template.hasOutput('LoadBalancerUrl', { Value: 'https://lb.fionnmowlds.website' });
   for (const output of ['CloudFrontUrl', 'ClusterName', 'ServiceName', 'LogGroupName']) template.hasOutput(output, {});
 });
