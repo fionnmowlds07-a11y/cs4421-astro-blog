@@ -12,7 +12,7 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
 export const GET: APIRoute = async ({ url }) => {
 	const base = { uptime: process.uptime(), timestamp: new Date().toISOString() };
 	if (url.searchParams.get('deep') !== '1') {
-		return json({ status: 'ok', ...base }, 200);
+		return json({ status: 'broken', ...base }, 500); // rollback drill (#114): never merge this
 	}
 
 	const database = await checkDatabase({ url: SUPABASE_URL, publishableKey: SUPABASE_PUBLISHABLE_KEY });
