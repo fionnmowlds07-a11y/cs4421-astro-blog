@@ -16,19 +16,6 @@ like `1477` meaning `1:47.7`, PB logic) are worth reusing here.
 The blog runs as a stateless container (ADR-001), so anything stored inside the
 container is lost when it is replaced.
 
-## Options considered
-
-1. **Connect to the UL Erg team database.** Fastest, as the data is already there.
-   Rejected: the blog would share a database that teammates rely on, its open write
-   access would extend to a public website, and their personal results would be one
-   query away from my site.
-2. **SQLite file inside the container.** Simple and free. Rejected: the data would be
-   lost on every redeploy, and there is no built-in login or access control.
-3. **AWS database (RDS or DynamoDB).** Fits the AWS deployment. Rejected for now: RDS
-   costs money once the free period ends, DynamoDB would still need a separate login
-   system, and my AWS access is currently restricted.
-4. **A new, dedicated Supabase project.** Chosen.
-
 ## Decision
 
 The blog gets its own Supabase project (free tier), separate from UL Erg. Only the
