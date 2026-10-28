@@ -17,6 +17,32 @@ training, tested in CI and deployed to AWS.
 | Rowing     | My PBs and recent sessions. Only my account can log in and add or edit sessions (Supabase with row level security) |
 | API        | `/api/health` for the load balancer (`?deep=1` also checks the database), `/api/feedback`, football summaries    |
 
+## Screenshots of live site for ease of marking
+
+The home page, linking to the Man United and Rowing sections.
+
+![Home page](docs/screenshots/homepage.png)
+
+The Man United overview with league position, recent results, fixtures and top scorers.
+
+![Man United overview](docs/screenshots/man-united-overview.png)
+
+The admin login for the rowing pages, which only my account can use.
+
+![Admin login](docs/screenshots/admin-login.png)
+
+The rowing admin page where I add and edit my erg sessions and on-water outings.
+
+![Rowing admin](docs/screenshots/rowing-admin.png)
+
+Adding an erg session as admin, with the split worked out for each piece.
+
+![Add erg session](docs/screenshots/add-erg-session.png)
+
+The write-up of the rollback drill in issue [#114](https://github.com/fionnmowlds07-a11y/cs4421-astro-blog/issues/114).
+
+![Rollback drill](docs/screenshots/rollback-drill.png)
+
 ## How it's built
 
 - **Astro 7** with `output: 'server'` on Node 24. Content pages are prerendered, the APIs,
